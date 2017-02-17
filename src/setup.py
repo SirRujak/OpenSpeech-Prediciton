@@ -2,6 +2,8 @@
 # -*- coding: utf-8 -*-
 from __future__ import print_function
 from gensim.models import word2vec
+import gzip
+import shutil
 import os
 import numpy as np
 import random
@@ -31,9 +33,10 @@ class DataBuilder:
                  embedding_file='OpenSpeech-Embeddings.pickle'):
         self.w2v_url = w2v_url
         self.sk_url = sk_url
-        self.w2v_file_name = w2v_file_name + '.gz'
-        self.w2v_file_name_extracted = w2v_file_name
+        self.w2v_file_name = w2v_file_name
+        self.w2v_file_name_extracted = w2v_file_name[:-3]
         self.sk_file_name = sk_file_name
+        self.sk_file_name_extracted = sk_file_name[:-4]
         self.w2v_size = 1647046227
         self.sk_size = 574661177
         self.sorted_words_file = sorted_words_file
@@ -48,9 +51,7 @@ class DataBuilder:
 
     def setup(self):
         self.downloader()
-        ## FIXME
-        ##self.extractor()
-        ##self.arrangeFiles()
+        self.maybe_extract()
         self.maybe_clean()
         self.maybe_calc_frequencies()
         self.maybe_build_sorted_dict()
@@ -213,7 +214,7 @@ class DataBuilder:
     def maybe_download(self, url, filename, expected_bytes):
         """Download a file if not present, and make sure it's the right size."""
         if not os.path.exists(filename):
-            ##filename, _ = urlretrieve(url + filename, filename)
+            filename, _ = urlretrieve(url + filename, filename)
             print('not found', filename)
         statinfo = os.stat(filename)
         if statinfo.st_size == expected_bytes:
@@ -221,36 +222,47 @@ class DataBuilder:
         else:
             print(statinfo.st_size)
             raise Exception(
-                print('filename', filename, statinfo.st_size)
-                ##'Failed to verify ' + filename + '. Can you get to it with a browser?')
+                print(##'filename', filename, statinfo.st_size)
+                'Failed to verify ' + filename + '. Can you get to it with a browser?')
             )
 
-    def extractor(self):
-        self.maybe_extract(self.w2v_file_name)
-        self.maybe_extract(self.sk_file_name)
-
-    def maybe_extract(self, filename):
-        root = os.path.splitext(os.path.splitext(filename)[0])[0]  # remove .tar.gz
-        force = False
-        print(root+'.bin')
-        if os.path.isdir(root+'.bin') and not force:
-        # You may override by setting force=True.
-            print('%s already present - Skipping extraction of %s.' % (root, filename))
+    def maybe_extract(self):
+        if not os.path.exists(self.w2v_file_name_extracted):
+            self.extractor(self.w2v_file_name)
         else:
-            print('Extracting data for %s. This may take a while. Please wait.' % root)
-            tar = tarfile.open(filename)
-            sys.stdout.flush()
-            tar.extractall()
-            tar.close()
-        data_folders = [
-            os.path.join(root, d) for d in sorted(os.listdir(root))
-            if os.path.isdir(os.path.join(root, d))]
-        if len(data_folders) != num_classes:
-            raise Exception(
-                'Expected %d folders, one per class. Found %d instead.' % (
-                    num_classes, len(data_folders)))
-        print(data_folders)
-        return data_folders
+            print('Found %s, skipping.' % self.w2v_file_name_extracted)
+        self.extractor(self.sk_file_name)
+
+    def extractor(self, filename):
+        print('Attempting to extract %s.' % filename)
+        if filename[-3:] == '.gz':
+            temp_filename = filename[:-3]
+            self.extract_gzip(filename, temp_filename)
+        elif filename[-4:] == '.zip':
+            temp_filename = filename[:-4]
+            self.extract_zip(filename, temp_filename)
+
+    def extract_gzip(self, filename_in, filename_out):
+        with gzip.open(filename_in, 'rb') as file_in:
+            with open(filename_out, 'wb') as file_out:
+                shutil.copyfileobj(file_in, file_out)
+
+    def extract_zip(self, filename_in, filename_out):
+        with zipfile.ZipFile(filename_in, 'r') as zip_file:
+            zip_paths = ['final/en_US/en_US.blogs.txt',
+                        'final/en_US/en_US.news.txt',
+                        'final/en_US/en_US.twitter.txt']
+            new_paths = ['en_US.blogs.txt',
+                        'en_US.news.txt',
+                        'en_US.twitter.txt']
+            for key, item in enumerate(zip_paths):
+
+                if not os.path.exists(new_paths[key]):
+                    with zip_file.open(item, 'r') as file_in:
+                        with open(new_paths[key], 'wb') as file_out:
+                            shutil.copyfileobj(file_in, file_out)
+                else:
+                    print('Found %s, skipping.' % new_paths[key])
 
     def setup_contractions(self):
         self.contractions = {
@@ -357,7 +369,7 @@ class DataBuilder:
 if __name__ == '__main__':
     word2vec_pretrained_link = 'https://docs.google.com/uc?export=download&confirm=iu5Z&id=0B7XkCwpI5KDYNlNUTTlSS21pQmM'
     swiftkey_prediction_data_link = 'https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip'
-    word2vec_filename = 'GoogleNews-vectors-negative300.bin'
+    word2vec_filename = 'GoogleNews-vectors-negative300.bin.gz'
     swiftkey_filename = 'Coursera-SwiftKey.zip'
     os.chdir('..')
     os.chdir('Datasets')
