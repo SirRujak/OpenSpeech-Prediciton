@@ -42,8 +42,7 @@ class DataBuilder:
         self.sorted_words_file = sorted_words_file
         ## FIXME: Really need to move this to the commented line.
         ## It breaks way too often with just a bad apostrophe.
-        self.punct_regex = re.compile('[%s]' % re.escape(string.punctuation))
-        ##remove = regex.compile(ur'[\p{C}|\p{M}|\p{P}|\p{S}|\p{Z}]+', regex.UNICODE)
+        self.setup_text_replacement()
         self.model = None
         self.final_dict = {}
         self.final_dict_file = final_dict_file
@@ -92,7 +91,7 @@ class DataBuilder:
                 pickle.dump(temp_dh, temp_file)
             return temp_dh
         else:
-            print('Found %s, skipping generation of embeddings.')
+            print('Found %s, skipping generation of embeddings.' % self.embedding_file)
             print('Loading embeddings.')
             temp_dh = None
             with open(self.embedding_file, 'rb') as temp_file:
@@ -179,32 +178,41 @@ class DataBuilder:
         with open(filename, 'r', encoding='utf8') as temp_file:
             with open('clean_' + filename, 'a', encoding='utf8') as temp_out_file:
                 for line in temp_file:
-                    temp_line = line.strip().split(' ')
-                    for key, word in enumerate(temp_line):
-                        if word[0].isupper() and word[1:].islower() and key != 0:
-                            tmp_word = word
-                        else:
-                            tmp_word = word.lower()
-                        tmp_word = tmp_word.strip()
-                        try:
-                            ##temp_line[key] = self.contractions[word]
-                            tmp_word = self.contractions[word]
-                        except:
-                            pass
-                        if tmp_word[-2:] == "'s":
-                            ##temp_line[key] = tmp_word[:-2]
-                            tmp_word = tmp_word[:-2]
-                        tmp_word = self.punct_regex.sub('', tmp_word)
-                        temp_line[key] = tmp_word
+                    temp_line = self.symbol_changer(line)
+                    ##self.regex_keep_apost.sub()
+                    temp_line = self.regex_keep_apost.sub(' ', temp_line)
+                    temp_line = temp_line.strip().split(' ')
                     temp_line_2 = []
+                    ##print(temp_line)
                     for key, word in enumerate(temp_line):
+                        if len(word) > 0:
+                            if word[0].isupper() and word[1:].islower() and key != 0:
+                                temp_word = word
+                            else:
+                                temp_word = word.lower()
+                            temp_word = temp_word.strip()
+                            ##if '10' in tmp_word:
+                            ##    print(tmp_word)
+                            try:
+                                ##temp_line[key] = self.contractions[word]
+                                temp_word = self.contractions[temp_word]
+                            except:
+                                pass
+                            if temp_word[-2:] == "'s":
+                                temp_word = temp_word[:-2]
+                            temp_word = self.punct_regex.sub('', temp_word)
+                            if temp_word != "":
+                                temp_line_2.append(temp_word)
+                    temp_line_3 = []
+                    for key, word in enumerate(temp_line_2):
                         if len(word) > 1:
-                            temp_line_2.append(word)
+                            temp_line_3.append(word)
                         elif word == 'i':
-                            temp_line_2.append('I')
+                            temp_line_3.append('I')
                         elif word == 'a':
-                            temp_line_2.append('a')
-                    temp_out_file.write(' '.join(temp_line_2) + '\n')
+                            temp_line_3.append('a')
+                    if len(temp_line_3) > 0:
+                        temp_out_file.write(' '.join(temp_line_3) + '\n')
 
 
     def downloader(self):
@@ -263,8 +271,28 @@ class DataBuilder:
                             shutil.copyfileobj(file_in, file_out)
                 else:
                     print('Found %s, skipping.' % new_paths[key])
+    def symbol_changer(self, temp_text):
+        return self.regex_replace_characters.sub(
+            lambda m: self.replacement_dict_escaped[re.escape(m.group(0))], temp_text)
 
-    def setup_contractions(self):
+    def setup_text_replacement(self):
+        self.replacement_dict = {
+            '%': ' percent ',
+            '£': ' pound ',
+            '$': ' dollar ',
+            '€': ' euro ',
+            '&': ' and ',
+            '@': ' at ',
+            '+': ' plus ',
+            '’': "'"
+        }
+        self.replacement_dict_escaped = dict((re.escape(k), v) for k, v in self.replacement_dict.items())
+        self.regex_replace_characters = re.compile('|'.join(self.replacement_dict_escaped.keys()))
+        ##self.regex_keep_apost = re.compile(r"[^\P{P}\']")
+        self.regex_keep_apost = re.compile(r"[^\w{w}\']+")
+
+        self.punct_regex = re.compile('[%s]' % re.escape(string.punctuation))
+        ##remove = regex.compile(ur'[\p{C}|\p{M}|\p{P}|\p{S}|\p{Z}]+', regex.UNICODE)
         self.contractions = {
             "10": "ten",
             "11": "eleven",
@@ -275,6 +303,7 @@ class DataBuilder:
             "100": "one hundred",
             "2012": "two thousand and twelve",
             "ain't": "is not",
+            "aint": "is not",
             "aren't": "are not",
             "can't": "cannot",
             "'cause": "because",
