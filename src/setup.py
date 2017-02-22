@@ -17,6 +17,8 @@ from six.moves import range
 from six.moves.urllib.request import urlretrieve
 
 import pickle
+import sammon
+##import embedder
 
 class DataHolder:
     def __init__(self):
@@ -30,7 +32,8 @@ class DataBuilder:
                  w2v_file_name, sk_file_name,
                  sorted_words_file='sorted_words.pickle',
                  final_dict_file='sorted_dict_100k.pickle',
-                 embedding_file='OpenSpeech-Embeddings.pickle'):
+                 embedding_file='OpenSpeech-Embeddings.pickle',
+                 sammon_dict_file='sammon_dict_file.pickle'):
         self.w2v_url = w2v_url
         self.sk_url = sk_url
         self.w2v_file_name = w2v_file_name
@@ -44,6 +47,7 @@ class DataBuilder:
         ## It breaks way too often with just a bad apostrophe.
         self.setup_text_replacement()
         self.model = None
+        self.sammon_dict_file = sammon_dict_file
         self.final_dict = {}
         self.final_dict_file = final_dict_file
         self.embedding_file = embedding_file
@@ -54,6 +58,7 @@ class DataBuilder:
         self.maybe_clean()
         self.maybe_calc_frequencies()
         self.maybe_build_sorted_dict()
+        self.maybe_generate_sammon_dict()
         return self.maybe_build_final()
 
     def maybe_build_final(self):
@@ -131,6 +136,34 @@ class DataBuilder:
             print("Found final dictionary file %s, loading." % self.final_dict_file)
             with open(self.final_dict_file, 'rb') as temp_file:
                 self.final_dict = pickle.load(temp_file)
+
+    def maybe_generate_sammon_dict(self):
+        if not os.path.exists(self.sammon_dict_file):
+            temp_dict = {}
+            print('Creating temporary model dictionary.')
+            self.sammon_keys = []
+            for key, val in enumerate(self.final_dict):
+                ##print(key, val)
+                temp_dict[val] = self.final_dict[val]
+                self.sammon_keys.append(val)
+            print('Done creating temporary model dictionary.')
+            print('Generating lower dimension dictionary.')
+            temp_matrix = []
+            for key, val in enumerate(self.sammon_keys):
+                temp_matrix.append(temp_dict[val])
+            print(temp_matrix[0])
+            temp_sammoned_matrix = sammon.sammon(temp_matrix)
+            self.sammon_dict = {}
+            for key, val in enumerate(self.sammon_keys):
+                self.sammon_dict[val] = temp_sammoned_matrix[key]
+            with open(self.sammon_dict_file, 'wb') as temp_file:
+                pickle.dump(self.sammon_dict, temp_file)
+            print('Done generating lower dimension dictionary.')
+        else:
+            print("Found sammon dictionary file %s, loading."
+                  % self.sammon_dict_file)
+            with open(self.sammon_dict_file, 'rb') as temp_file:
+                self.sammon_dict = pickle.load(temp_file)
 
     def maybe_calc_frequencies(self):
         if not os.path.exists(self.sorted_words_file):
