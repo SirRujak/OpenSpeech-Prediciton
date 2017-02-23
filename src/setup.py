@@ -5,6 +5,7 @@ from gensim.models import word2vec
 import gzip
 import shutil
 import os
+import nltk
 import numpy as np
 import random
 import re
@@ -17,8 +18,8 @@ from six.moves import range
 from six.moves.urllib.request import urlretrieve
 
 import pickle
-import sammon
-##import embedder
+##import sammon
+import embedder
 
 class DataHolder:
     def __init__(self):
@@ -43,6 +44,7 @@ class DataBuilder:
         self.w2v_size = 1647046227
         self.sk_size = 574661177
         self.sorted_words_file = sorted_words_file
+        self.stop_words = None
         ## FIXME: Really need to move this to the commented line.
         ## It breaks way too often with just a bad apostrophe.
         self.setup_text_replacement()
@@ -51,15 +53,20 @@ class DataBuilder:
         self.final_dict = {}
         self.final_dict_file = final_dict_file
         self.embedding_file = embedding_file
+        self.word_switch_dict = {}
 
     def setup(self):
         self.downloader()
         self.maybe_extract()
         self.maybe_clean()
         self.maybe_calc_frequencies()
+        self.maybe_generate_embedding()
         self.maybe_build_sorted_dict()
-        self.maybe_generate_sammon_dict()
+        ##self.maybe_generate_sammon_dict()
         return self.maybe_build_final()
+
+    def maybe_generate_embedding(self):
+        pass
 
     def maybe_build_final(self):
         if not os.path.exists(self.embedding_file):
@@ -175,6 +182,25 @@ class DataBuilder:
             for i in temp_filenames:
                 self.calc_freqnecies(i)
             print(len(self.frequency_dict))
+            for word in self.frequency_dict:
+                temp_first_count = self.frequency_dict[word]
+                if word.islower():
+                    temp_word = word.capitalize()
+                else:
+                    temp_word = word.lower()
+                if temp_word in self.frequency_dict:
+                    temp_second_count = self.frequency_dict[temp_word]
+                    if temp_first_count < temp_second_count:
+                        self.frequency_dict[word] += temp_second_count
+                        self.word_switch_dict[temp_word] = word
+                        ##del self.frequency_dict[temp_word]
+                    else:
+                        self.frequency_dict[temp_word] += temp_first_count
+                        self.word_switch_dict[word] = temp_word
+                        ##del self.frequency_dict[word]
+            for word in self.word_switch_dict:
+                del self.frequency_dict[word]
+
             sorted_vals = sorted(self.frequency_dict.items(), key=lambda x: x[1], reverse=True)
             self.sorted_vals_100k = sorted_vals[:100000]
             with open(self.sorted_words_file, 'wb') as temp_file:
@@ -198,11 +224,19 @@ class DataBuilder:
 
     def maybe_clean(self):
         temp_filenames = ['en_US.blogs.txt', 'en_US.news.txt', 'en_US.twitter.txt']
-        new_filenames = []
+        ##new_filenames = []
         for i in temp_filenames:
+            if self.stop_words == None:
+                try:
+                    self.stop_words = set(nltk.corpus.stopwords.words('english'))
+                except LookupError:
+                    print('Downloading stop word corpus.')
+                    nltk.download('stopwords')
+                    self.stop_words = set(nltk.corpus.stopwords.words('english'))
             if not os.path.exists('clean_' + i):
                 print('Cleaning %s.' % i)
-                new_filenames.append(self.clean_data(i))
+                self.clean_data(i)
+                ##new_filenames.append(self.clean_data(i))
             else:
                 print('Found %s, skipping.' % i)
 
@@ -218,24 +252,34 @@ class DataBuilder:
                     temp_line_2 = []
                     ##print(temp_line)
                     for key, word in enumerate(temp_line):
-                        if len(word) > 0:
-                            if word[0].isupper() and word[1:].islower() and key != 0:
-                                temp_word = word
+                        temp_word = word.strip()
+                        if len(temp_word) > 0:
+                            if temp_word.lower() in self.stop_words:
+                                temp_word = word.lower()
+                            if len(temp_word) > 1:
+                                if temp_word[0].isupper() and temp_word[1:].islower() and key != 0:
+                                    temp_word = word
+                                else:
+                                    temp_word = word.lower()
                             else:
                                 temp_word = word.lower()
-                            temp_word = temp_word.strip()
                             ##if '10' in tmp_word:
                             ##    print(tmp_word)
                             try:
-                                ##temp_line[key] = self.contractions[word]
-                                temp_word = self.contractions[temp_word]
+                                temp_word = self.word_switch_dict[temp_word]
                             except:
                                 pass
+                            if temp_word in self.contractions or temp_word.lower() in self.contractions:
+                                try:
+                                    ##temp_line[key] = self.contractions[word]
+                                    temp_word = self.contractions[temp_word]
+                                except:
+                                    temp_word = self.contractions[temp_word.lower()]
                             if temp_word[-2:] == "'s":
                                 temp_word = temp_word[:-2]
                             temp_word = self.punct_regex.sub('', temp_word)
                             if temp_word != "":
-                                temp_line_2.append(temp_word)
+                                temp_line_2.extend(temp_word.split())
                     temp_line_3 = []
                     for key, word in enumerate(temp_line_2):
                         if len(word) > 1:
