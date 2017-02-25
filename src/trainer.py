@@ -31,19 +31,23 @@ class BatchGenerator(object):
 class Trainer:
     """Main class for generating a NN for predicting a word given the
         previous words fed to it."""
-    def __init__(self, train_data_filenames, embedding, window_size):
+    def __init__(self, train_data_filenames, embedding, train_info):
         self.saver = tf.train.Saver()
         self.word_list = list()
         self.train_data_filenames = train_data_filenames
         self.embedding = embedding
         self.embedding_dimensions = len(embedding.embedding[0])
         self.train_data = []
-        self.window_size = window_size
+        self.window_size = train_info['window_size']
+        self.first_layer_depth = train_info['first_layer_depth']
+        self.second_layer_depth = train_info['second_layer_depth']
         self.batch_generator = BatchGenerator(self.train_data)
+        self.graph = tf.Graph()
 
     def setup(self):
-        """Creates the batch generator."""
-        pass
+        """Creates the graph."""
+        with self.graph.as_default():
+            self.generate_graph()
 
     def read_data(self):
         """Load the data from each line and put it in a list of lists.
@@ -71,11 +75,6 @@ class Trainer:
         ## Clearing out the data that won't be used.
         self.word_list = list()
 
-    def generate_batch(self):
-        """Reads the next set of words, appends WINDOW_SIZE padding
-            to the front and returns it."""
-        pass
-
     def generate_graph(self):
         """Builds the tensorflow graph representation. It contains:
             Four concurent convolutions, four deepening convos, a
@@ -89,5 +88,8 @@ if __name__ == "__main__":
     TRAIN_DATA_FILENAMES = ['clean_en_US.blogs.txt',
                             'clean_en_US.news.txt',
                             'clean_en_US.twitter.txt']
-    TRAIN_WINDOW = 5
-    TRAINER = Trainer(TRAIN_DATA_FILENAMES, TRAINED_EMBEDDING, TRAIN_WINDOW)
+    ##TRAIN_WINDOW = 5
+    TRAIN_INFO = {'window_size':5,
+                  'first_layer_depth':4,
+                  'second_layer_depth': 8,}
+    TRAINER = Trainer(TRAIN_DATA_FILENAMES, TRAINED_EMBEDDING, TRAIN_INFO)
