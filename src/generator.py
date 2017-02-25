@@ -1,26 +1,25 @@
+"""Used to generate word embeddings using embedder.py."""
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 from __future__ import print_function
-from gensim.models import word2vec
 import gzip
-import shutil
-import os
-import nltk
-import numpy as np
-import random
+import pickle
 import re
-##import regex
+import shutil
 import string
-import tensorflow as tf
-import tarfile
+import os
 import zipfile
-from six.moves import range
+import nltk
 from six.moves.urllib.request import urlretrieve
 
-import pickle
 import embedder
 
 class DataHolder:
+    """Holds:
+        dictionary =            word -> number
+        reverse_dictionary =    number -> word
+        embedding =             word embeddings as list
+        key =                   list of word to key tuples"""
     def __init__(self):
         self.dictionary = {}
         self.reverse_dictionary = {}
@@ -28,6 +27,8 @@ class DataHolder:
         self.key = []
 
 class DataBuilder:
+    """Class used to actually build the data. Create an instance and then run
+        instance.setup(). The returned value will be a DataHolder object."""
     def __init__(self, sk_url, sk_file_name,
                  embedding_filename='SK_full_20k_embedding.pickle'):
         self.sk_url = sk_url
@@ -35,14 +36,13 @@ class DataBuilder:
         self.sk_file_name_extracted = sk_file_name[:-4]
         self.sk_size = 574661177
         self.stop_words = None
-        ## FIXME: Really need to move this to the commented line.
-        ## It breaks way too often with just a bad apostrophe.
         self.setup_text_replacement()
         self.model = None
         self.embedding_filename = embedding_filename
         self.word_switch_dict = {}
 
     def setup(self):
+        """Download, extract, and clean data if necissary then generate an embedding."""
         if not os.path.exists(self.embedding_filename):
             self.downloader()
             self.maybe_extract()
@@ -50,6 +50,7 @@ class DataBuilder:
         return self.maybe_generate_embedding()
 
     def maybe_generate_embedding(self):
+        """Looks for an embedding file and either loads it or creates it."""
         if not os.path.exists(self.embedding_filename):
             print('Generating embedding at %s.' % self.embedding_filename)
             temp_obj = embedder.Embedder()
@@ -69,6 +70,8 @@ class DataBuilder:
                 return pickle.load(temp_file)
 
     def maybe_clean(self):
+        """Checks if the files need to be cleaned and calls clean_data on them
+            if necissary."""
         temp_filenames = ['en_US.blogs.txt', 'en_US.news.txt', 'en_US.twitter.txt']
         ##new_filenames = []
         for i in temp_filenames:
@@ -87,7 +90,7 @@ class DataBuilder:
                 print('Found %s, skipping.' % i)
 
     def clean_data(self, filename):
-        ##print(os.listdir())
+        """Steps through each file and attempts to reduce words to a uniform set."""
         with open(filename, 'r', encoding='utf8') as temp_file:
             with open('clean_' + filename, 'a', encoding='utf8') as temp_out_file:
                 for line in temp_file:
@@ -113,13 +116,14 @@ class DataBuilder:
                             ##    print(tmp_word)
                             try:
                                 temp_word = self.word_switch_dict[temp_word]
-                            except:
+                            except KeyError:
                                 pass
-                            if temp_word in self.contractions or temp_word.lower() in self.contractions:
+                            if temp_word in self.contractions \
+                                or temp_word.lower() in self.contractions:
                                 try:
                                     ##temp_line[key] = self.contractions[word]
                                     temp_word = self.contractions[temp_word]
-                                except:
+                                except KeyError:
                                     temp_word = self.contractions[temp_word.lower()]
                             if temp_word[-2:] == "'s":
                                 temp_word = temp_word[:-2]
@@ -139,6 +143,7 @@ class DataBuilder:
 
 
     def downloader(self):
+        """Calls maybe_download on all the files it needs to fetch."""
         self.maybe_download(self.sk_url, self.sk_file_name, self.sk_size)
 
     def maybe_download(self, url, filename, expected_bytes):
@@ -157,26 +162,30 @@ class DataBuilder:
             )
 
     def maybe_extract(self):
+        """Checks if each file needs to be extracted."""
         if not os.path.exists(self.sk_file_name_extracted):
             self.extractor(self.sk_file_name)
         else:
             print('Found %s, skipping.' % self.sk_file_name_extracted)
 
     def extractor(self, filename):
+        """Attempts to extract the given file into the current directory."""
         print('Attempting to extract %s.' % filename)
         if filename[-3:] == '.gz':
             temp_filename = filename[:-3]
             self.extract_gzip(filename, temp_filename)
         elif filename[-4:] == '.zip':
             temp_filename = filename[:-4]
-            self.extract_zip(filename, temp_filename)
+            self.extract_zip(filename)
 
     def extract_gzip(self, filename_in, filename_out):
+        """Used to extract pre-made gensim binary files that have been gziped."""
         with gzip.open(filename_in, 'rb') as file_in:
             with open(filename_out, 'wb') as file_out:
                 shutil.copyfileobj(file_in, file_out)
 
-    def extract_zip(self, filename_in, filename_out):
+    def extract_zip(self, filename_in):
+        """Extracts the necissary data from the Swiftkey Datset."""
         with zipfile.ZipFile(filename_in, 'r') as zip_file:
             zip_paths = ['final/en_US/en_US.blogs.txt',
                          'final/en_US/en_US.news.txt',
@@ -192,11 +201,14 @@ class DataBuilder:
                             shutil.copyfileobj(file_in, file_out)
                 else:
                     print('Found %s, skipping.' % new_paths[key])
+
     def symbol_changer(self, temp_text):
+        """Removes unused punctuation and non-word characters."""
         return self.regex_replace_characters.sub(
-            lambda m: self.replacement_dict_escaped[re.escape(m.group(0))], temp_text)
+            lambda m: self.rep_dict_escaped[re.escape(m.group(0))], temp_text)
 
     def setup_text_replacement(self):
+        """Defines all of the actual cleaning rules."""
         self.replacement_dict = {
             '%': ' percent ',
             '£': ' pound ',
@@ -207,8 +219,9 @@ class DataBuilder:
             '+': ' plus ',
             '’': "'"
         }
-        self.replacement_dict_escaped = dict((re.escape(k), v) for k, v in self.replacement_dict.items())
-        self.regex_replace_characters = re.compile('|'.join(self.replacement_dict_escaped.keys()))
+        ## This is the replacement dict that has been escaped.
+        self.rep_dict_escaped = dict((re.escape(k), v) for k, v in self.replacement_dict.items())
+        self.regex_replace_characters = re.compile('|'.join(self.rep_dict_escaped.keys()))
         ##self.regex_keep_apost = re.compile(r"[^\P{P}\']")
         self.regex_keep_apost = re.compile(r"[^\w{w}\']+")
 
@@ -317,12 +330,13 @@ class DataBuilder:
             }
 
 def generate():
-    swiftkey_prediction_data_link = 'https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip'
-    embedding_filename = 'SK_full_20k_embedding.pickle'
+    """Main callable, fetches necissary data then builds embedding. Returns
+        a DataHolder object."""
+    sk_data_link = 'https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip'
     swiftkey_filename = 'Coursera-SwiftKey.zip'
     os.chdir('..')
     os.chdir('Datasets')
-    data_builder = DataBuilder(swiftkey_prediction_data_link, swiftkey_filename)
+    data_builder = DataBuilder(sk_data_link, swiftkey_filename)
     return data_builder.setup()
 
 if __name__ == '__main__':
