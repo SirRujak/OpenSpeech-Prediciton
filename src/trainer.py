@@ -43,6 +43,7 @@ class Trainer:
         self.second_layer_depth = train_info['second_layer_depth']
         self.batch_generator = BatchGenerator(self.train_data)
         self.graph = tf.Graph()
+        self.train_graph = None
 
     def setup(self):
         """Creates the graph."""
@@ -79,7 +80,74 @@ class Trainer:
         """Builds the tensorflow graph representation. It contains:
             Four concurent convolutions, four deepening convos, a
             combination, and a max pool."""
-        pass
+        kernel_sizes = {'1x1':1,
+                        '2x2':2,
+                        '3x3':3,
+                        '4x4':4}
+        self.train_graph = TrainGraph(kernel_sizes,
+                                      self.embedding_dimensions,
+                                      self.first_layer_depth,
+                                      self.second_layer_depth)
+
+class ConvAndReLu:
+    """Contains all of the steps for one convolution with ReLu."""
+    def __init__(self, kernel_size, embedding_dimensions,
+                 final_layer_depth, input_data):
+        self.weights = tf.Variable(tf.truncated_normal(
+            [kernel_size, embedding_dimensions, final_layer_depth]))
+        self.biases = tf.Variable(tf.zeros([final_layer_depth]))
+        self.convolution = tf.nn.conv1d(input_data, self.weights, 1, padding='SAME')
+        self.hidden = tf.nn.relu(self.convolution + self.biases)
+
+class TrainGraph:
+    def __init__(self, kernel_sizes, embedding_dimensions,
+                 first_layer_depth, second_layer_depth):
+        ## Inputs of form [sentence_length, window_size, ]
+        self.input_data = tf.placeholder(tf.float32, shape=[None, embedding_dimensions])
+
+        self.conv_layer_1 = [ConvAndReLu(kernel_sizes['1x1'], embedding_dimensions,
+                                         first_layer_depth, self.input_data),
+                             ConvAndReLu(kernel_sizes['2x2'], embedding_dimensions,
+                                         first_layer_depth, self.input_data),
+                             ConvAndReLu(kernel_sizes['3x3'], embedding_dimensions,
+                                         first_layer_depth, self.input_data),
+                             ConvAndReLu(kernel_sizes['4x4'], embedding_dimensions,
+                                         first_layer_depth, self.input_data)]
+
+        self.conv_layer_2 = [ConvAndReLu(kernel_sizes['1x1'], first_layer_depth,
+                                         second_layer_depth, self.conv_layer_1[0].hidden),
+                             ConvAndReLu(kernel_sizes['1x1'], first_layer_depth,
+                                         second_layer_depth, self.conv_layer_1[1].hidden),
+                             ConvAndReLu(kernel_sizes['1x1'], first_layer_depth,
+                                         second_layer_depth, self.conv_layer_1[2].hidden),
+                             ConvAndReLu(kernel_sizes['1x1'], first_layer_depth,
+                                         second_layer_depth, self.conv_layer_1[3].hidden)]
+        ## Weights for the first set of convolutions.
+        self.weights_1x1 = tf.Variable(tf.truncated_normal(
+            [kernel_sizes['1x1'], embedding_dimensions, first_layer_depth]))
+        self.weights_2x2 = tf.Variable(tf.truncated_normal(
+            [kernel_sizes['2x2'], embedding_dimensions, first_layer_depth]))
+        self.weights_3x3 = tf.Variable(tf.truncated_normal(
+            [kernel_sizes['3x3'], embedding_dimensions, first_layer_depth]))
+        self.weights_4x4 = tf.Variable(tf.truncated_normal(
+            [kernel_sizes['4x4'], embedding_dimensions, first_layer_depth]))
+        ## Biases for the first set of hidden layers.
+        self.biases_1x1 = tf.Variable(tf.zeros([first_layer_depth]))
+        self.biases_2x2 = tf.Variable(tf.zeros([first_layer_depth]))
+        self.biases_3x3 = tf.Variable(tf.zeros([first_layer_depth]))
+        self.biases_4x4 = tf.Variable(tf.zeros([first_layer_depth]))
+        ## First set of convolutions.
+        self.conv_1x1 = tf.nn.conv1d(self.input_data, self.weights_1x1, 1, padding='SAME')
+        self.conv_2x2 = tf.nn.conv1d(self.input_data, self.weights_2x2, 1, padding='SAME')
+        self.conv_3x3 = tf.nn.conv1d(self.input_data, self.weights_3x3, 1, padding='SAME')
+        self.conv_4x4 = tf.nn.conv1d(self.input_data, self.weights_4x4, 1, padding='SAME')
+        ## First hidden layer.
+        self.hidden_1x1 = tf.nn.relu(self.conv_1x1 + self.biases_1x1)
+        self.hidden_2x2 = tf.nn.relu(self.conv_2x2 + self.biases_2x2)
+        self.hidden_3x3 = tf.nn.relu(self.conv_3x3 + self.biases_3x3)
+        self.hidden_4x4 = tf.nn.relu(self.conv_4x4 + self.biases_4x4)
+
+
 
 if __name__ == "__main__":
     os.chdir('..')
@@ -88,8 +156,7 @@ if __name__ == "__main__":
     TRAIN_DATA_FILENAMES = ['clean_en_US.blogs.txt',
                             'clean_en_US.news.txt',
                             'clean_en_US.twitter.txt']
-    ##TRAIN_WINDOW = 5
     TRAIN_INFO = {'window_size':5,
-                  'first_layer_depth':4,
-                  'second_layer_depth': 8,}
+                  'first_layer_depth':16,
+                  'second_layer_depth': 32,}
     TRAINER = Trainer(TRAIN_DATA_FILENAMES, TRAINED_EMBEDDING, TRAIN_INFO)

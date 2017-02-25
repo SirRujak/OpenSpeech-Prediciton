@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 # These are all the modules we'll be using later. Make sure you can import them
 # before proceeding further.
+
 from __future__ import print_function
 import collections
 import math
@@ -30,7 +31,7 @@ class Embedder:
                  valid_size=8,
                  valid_window=100,
                  num_sampled=4096,
-                 num_steps = 100001
+                 num_steps=100001
                 ):
         self.filenames = filenames
         self.word_list = []
