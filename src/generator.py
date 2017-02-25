@@ -23,7 +23,7 @@ import embedder
 class DataHolder:
     def __init__(self):
         self.dictionary = {}
-        self.reverse_dictionary = []
+        self.reverse_dictionary = {}
         self.embedding = []
         self.key = []
 
@@ -43,9 +43,10 @@ class DataBuilder:
         self.word_switch_dict = {}
 
     def setup(self):
-        self.downloader()
-        self.maybe_extract()
-        self.maybe_clean()
+        if not os.path.exists(self.embedding_filename):
+            self.downloader()
+            self.maybe_extract()
+            self.maybe_clean()
         return self.maybe_generate_embedding()
 
     def maybe_generate_embedding(self):
@@ -315,11 +316,14 @@ class DataBuilder:
             "you've": "you have"
             }
 
-if __name__ == '__main__':
+def generate():
     swiftkey_prediction_data_link = 'https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip'
     embedding_filename = 'SK_full_20k_embedding.pickle'
     swiftkey_filename = 'Coursera-SwiftKey.zip'
     os.chdir('..')
     os.chdir('Datasets')
-    dh = DataBuilder(swiftkey_prediction_data_link, swiftkey_filename)
-    dh.setup()
+    data_builder = DataBuilder(swiftkey_prediction_data_link, swiftkey_filename)
+    return data_builder.setup()
+
+if __name__ == '__main__':
+    generate()
