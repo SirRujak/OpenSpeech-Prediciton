@@ -18,7 +18,6 @@ from six.moves import range
 from six.moves.urllib.request import urlretrieve
 
 import pickle
-##import sammon
 import embedder
 
 class DataHolder:
@@ -26,207 +25,53 @@ class DataHolder:
         self.dictionary = {}
         self.reverse_dictionary = []
         self.embedding = []
-        self.data = []
+        self.key = []
 
 class DataBuilder:
-    def __init__(self, w2v_url, sk_url,
-                 w2v_file_name, sk_file_name,
-                 sorted_words_file='sorted_words.pickle',
-                 final_dict_file='sorted_dict_100k.pickle',
-                 embedding_file='OpenSpeech-Embeddings.pickle',
-                 sammon_dict_file='sammon_dict_file.pickle'):
-        self.w2v_url = w2v_url
+    def __init__(self, sk_url, sk_file_name,
+                 embedding_filename='SK_full_20k_embedding.pickle'):
         self.sk_url = sk_url
-        self.w2v_file_name = w2v_file_name
-        self.w2v_file_name_extracted = w2v_file_name[:-3]
         self.sk_file_name = sk_file_name
         self.sk_file_name_extracted = sk_file_name[:-4]
-        self.w2v_size = 1647046227
         self.sk_size = 574661177
-        self.sorted_words_file = sorted_words_file
         self.stop_words = None
         ## FIXME: Really need to move this to the commented line.
         ## It breaks way too often with just a bad apostrophe.
         self.setup_text_replacement()
         self.model = None
-        self.sammon_dict_file = sammon_dict_file
-        self.final_dict = {}
-        self.final_dict_file = final_dict_file
-        self.embedding_file = embedding_file
+        self.embedding_filename = embedding_filename
         self.word_switch_dict = {}
 
     def setup(self):
         self.downloader()
         self.maybe_extract()
         self.maybe_clean()
-        self.maybe_calc_frequencies()
-        self.maybe_generate_embedding()
-        self.maybe_build_sorted_dict()
-        ##self.maybe_generate_sammon_dict()
-        return self.maybe_build_final()
+        return self.maybe_generate_embedding()
 
     def maybe_generate_embedding(self):
-        pass
-
-    def maybe_build_final(self):
-        if not os.path.exists(self.embedding_file):
-            ##print(self.sorted_vals_100k[0])
-            if self.model == None:
-                self.load_model()
-            print('Generating embedding file at %s.' % self.embedding_file)
-            temp_dh = DataHolder()
-            temp_dh.dictionary['UNK'] = 0
-            temp_dh.reverse_dictionary.append('UNK')
-            temp_dh.embedding.append(self.model['UNK'])
-            for index, values in enumerate(self.sorted_vals_100k):
-                if values[0] in self.final_dict:
-                    temp_dh.reverse_dictionary.append(values[0])
-                    temp_dh.embedding.append(self.model[values[0]])
-                    temp_dh.dictionary[values[0]] = len(temp_dh.reverse_dictionary) - 1
-
-            temp_filenames = ['clean_en_US.blogs.txt',
-                              'clean_en_US.news.txt',
-                              'clean_en_US.twitter.txt']
-            for temp_file_name in temp_filenames:
-                with open(temp_file_name, 'r') as temp_file:
-                    print('Processing %s.' % temp_file_name)
-                    for index, line in enumerate(temp_file):
-                        temp_dh.data.append([])
-                        temp_line = line.strip().split(' ')
-                        for _, word in enumerate(temp_line):
-                            try:
-                                temp_dh.data[-1].append(temp_dh.dictionary[word])
-                            except:
-                                temp_dh.data[-1].append(temp_dh.dictionary['UNK'])
-
-            with open(self.embedding_file, 'wb') as temp_file:
-                pickle.dump(temp_dh, temp_file)
-            return temp_dh
+        if not os.path.exists(self.embedding_filename):
+            print('Generating embedding at %s.' % self.embedding_filename)
+            temp_obj = embedder.Embedder()
+            embeds = temp_obj.build_embedding()
+            temp_holder = DataHolder()
+            temp_holder.embedding = embeds
+            temp_holder.dictionary = temp_obj.dictionary
+            temp_holder.reverse_dictionary = temp_obj.reverse_dictionary
+            temp_holder.key = temp_obj.count
+            with open(self.embedding_filename, 'wb') as temp_file:
+                pickle.dump(temp_holder, temp_file)
+            print('Done generating embedding.')
+            return temp_holder
         else:
-            print('Found %s, skipping generation of embeddings.' % self.embedding_file)
-            print('Loading embeddings.')
-            temp_dh = None
-            with open(self.embedding_file, 'rb') as temp_file:
-                temp_dh = pickle.load(temp_file)
-            return temp_dh
-
-    def load_model(self):
-        print('Loading word2vec model %s.' % self.w2v_file_name_extracted)
-        self.model = word2vec.Word2Vec.load_word2vec_format(self.w2v_file_name_extracted, binary=True)
-        self.model.init_sims(replace=True)
-
-    def maybe_build_sorted_dict(self):
-        if not os.path.exists(self.final_dict_file):
-            if self.model == None:
-                self.load_model()
-            ##print(self.model['I'])
-            broken_count = 0
-            largest_val = ""
-            largest_occurence = 0
-            failures = []
-            for index, values in enumerate(self.sorted_vals_100k):
-                try:
-                    self.final_dict[values[0]] = self.model[values[0]]
-                except:
-                    failures.append(values)
-                    if largest_val == "":
-                        largest_val = values[0]
-                        largest_occurence = values[1]
-                    broken_count += 1
-            print('Number of broken entries %i' % broken_count)
-            print('Most common broken value: %s, at %i occurences' % (largest_val, largest_occurence))
-            print(failures[:100])
-            print('UNK', self.model['UNK'])
-            with open(self.final_dict_file, 'wb') as temp_file:
-                pickle.dump(self.final_dict, temp_file)
-        else:
-            print("Found final dictionary file %s, loading." % self.final_dict_file)
-            with open(self.final_dict_file, 'rb') as temp_file:
-                self.final_dict = pickle.load(temp_file)
-
-    def maybe_generate_sammon_dict(self):
-        if not os.path.exists(self.sammon_dict_file):
-            temp_dict = {}
-            print('Creating temporary model dictionary.')
-            self.sammon_keys = []
-            for key, val in enumerate(self.final_dict):
-                ##print(key, val)
-                temp_dict[val] = self.final_dict[val]
-                self.sammon_keys.append(val)
-            print('Done creating temporary model dictionary.')
-            print('Generating lower dimension dictionary.')
-            temp_matrix = []
-            for key, val in enumerate(self.sammon_keys):
-                temp_matrix.append(temp_dict[val])
-            print(temp_matrix[0])
-            temp_sammoned_matrix = sammon.sammon(temp_matrix)
-            self.sammon_dict = {}
-            for key, val in enumerate(self.sammon_keys):
-                self.sammon_dict[val] = temp_sammoned_matrix[key]
-            with open(self.sammon_dict_file, 'wb') as temp_file:
-                pickle.dump(self.sammon_dict, temp_file)
-            print('Done generating lower dimension dictionary.')
-        else:
-            print("Found sammon dictionary file %s, loading."
-                  % self.sammon_dict_file)
-            with open(self.sammon_dict_file, 'rb') as temp_file:
-                self.sammon_dict = pickle.load(temp_file)
-
-    def maybe_calc_frequencies(self):
-        if not os.path.exists(self.sorted_words_file):
-            print('Calculating frequencies.')
-            temp_filenames = ['clean_en_US.blogs.txt',
-                              'clean_en_US.news.txt',
-                              'clean_en_US.twitter.txt']
-            self.frequency_dict = {}
-            for i in temp_filenames:
-                self.calc_freqnecies(i)
-            print(len(self.frequency_dict))
-            for word in self.frequency_dict:
-                temp_first_count = self.frequency_dict[word]
-                if word.islower():
-                    temp_word = word.capitalize()
-                else:
-                    temp_word = word.lower()
-                if temp_word in self.frequency_dict:
-                    temp_second_count = self.frequency_dict[temp_word]
-                    if temp_first_count < temp_second_count:
-                        self.frequency_dict[word] += temp_second_count
-                        self.word_switch_dict[temp_word] = word
-                        ##del self.frequency_dict[temp_word]
-                    else:
-                        self.frequency_dict[temp_word] += temp_first_count
-                        self.word_switch_dict[word] = temp_word
-                        ##del self.frequency_dict[word]
-            for word in self.word_switch_dict:
-                del self.frequency_dict[word]
-
-            sorted_vals = sorted(self.frequency_dict.items(), key=lambda x: x[1], reverse=True)
-            self.sorted_vals_100k = sorted_vals[:100000]
-            with open(self.sorted_words_file, 'wb') as temp_file:
-                ## A list of tuples, (word, number_of_uses)
-                pickle.dump(self.sorted_vals_100k, temp_file)
-        else:
-            print('Sorted values found. Loading %s.' % self.sorted_words_file)
-            with open(self.sorted_words_file, 'rb') as temp_file:
-                self.sorted_vals_100k = pickle.load(temp_file)
-            ##print(self.sorted_vals_100k[20:50])
-
-    def calc_freqnecies(self, filename):
-        with open(filename, 'r', encoding='utf8') as temp_file:
-            for index, line in enumerate(temp_file):
-                temp_line = line.strip().split(' ')
-                for key, word in enumerate(temp_line):
-                    try:
-                        self.frequency_dict[word] += 1
-                    except:
-                        self.frequency_dict[word] = 1
+            print('Found embedding at %s. Skipping generation. Loading.' % self.embedding_filename)
+            with open(self.embedding_filename, 'rb') as temp_file:
+                return pickle.load(temp_file)
 
     def maybe_clean(self):
         temp_filenames = ['en_US.blogs.txt', 'en_US.news.txt', 'en_US.twitter.txt']
         ##new_filenames = []
         for i in temp_filenames:
-            if self.stop_words == None:
+            if self.stop_words is None:
                 try:
                     self.stop_words = set(nltk.corpus.stopwords.words('english'))
                 except LookupError:
@@ -293,7 +138,6 @@ class DataBuilder:
 
 
     def downloader(self):
-        self.maybe_download(self.w2v_url, self.w2v_file_name, self.w2v_size)
         self.maybe_download(self.sk_url, self.sk_file_name, self.sk_size)
 
     def maybe_download(self, url, filename, expected_bytes):
@@ -308,15 +152,14 @@ class DataBuilder:
             print(statinfo.st_size)
             raise Exception(
                 print(##'filename', filename, statinfo.st_size)
-                'Failed to verify ' + filename + '. Can you get to it with a browser?')
+                    'Failed to verify ' + filename + '. Can you get to it with a browser?')
             )
 
     def maybe_extract(self):
-        if not os.path.exists(self.w2v_file_name_extracted):
-            self.extractor(self.w2v_file_name)
+        if not os.path.exists(self.sk_file_name_extracted):
+            self.extractor(self.sk_file_name)
         else:
-            print('Found %s, skipping.' % self.w2v_file_name_extracted)
-        self.extractor(self.sk_file_name)
+            print('Found %s, skipping.' % self.sk_file_name_extracted)
 
     def extractor(self, filename):
         print('Attempting to extract %s.' % filename)
@@ -335,11 +178,11 @@ class DataBuilder:
     def extract_zip(self, filename_in, filename_out):
         with zipfile.ZipFile(filename_in, 'r') as zip_file:
             zip_paths = ['final/en_US/en_US.blogs.txt',
-                        'final/en_US/en_US.news.txt',
-                        'final/en_US/en_US.twitter.txt']
+                         'final/en_US/en_US.news.txt',
+                         'final/en_US/en_US.twitter.txt']
             new_paths = ['en_US.blogs.txt',
-                        'en_US.news.txt',
-                        'en_US.twitter.txt']
+                         'en_US.news.txt',
+                         'en_US.twitter.txt']
             for key, item in enumerate(zip_paths):
 
                 if not os.path.exists(new_paths[key]):
@@ -473,12 +316,10 @@ class DataBuilder:
             }
 
 if __name__ == '__main__':
-    word2vec_pretrained_link = 'https://docs.google.com/uc?export=download&confirm=iu5Z&id=0B7XkCwpI5KDYNlNUTTlSS21pQmM'
     swiftkey_prediction_data_link = 'https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip'
-    word2vec_filename = 'GoogleNews-vectors-negative300.bin.gz'
+    embedding_filename = 'SK_full_20k_embedding.pickle'
     swiftkey_filename = 'Coursera-SwiftKey.zip'
     os.chdir('..')
     os.chdir('Datasets')
-    dh = DataBuilder(word2vec_pretrained_link, swiftkey_prediction_data_link,
-                    word2vec_filename, swiftkey_filename)
+    dh = DataBuilder(swiftkey_prediction_data_link, swiftkey_filename)
     dh.setup()

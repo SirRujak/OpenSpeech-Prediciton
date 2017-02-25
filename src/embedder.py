@@ -19,16 +19,16 @@ class Embedder:
                  filenames=['clean_en_US.blogs.txt',
                             'clean_en_US.news.txt',
                             'clean_en_US.twitter.txt'],
-                 vocabulary_size=50000,
+                 vocabulary_size=20000,
                  data_index=0,
                  num_skips=1,
-                 skip_window=2,
+                 skip_window=6,
                  batch_size=1024,
-                 embedding_size=30,
-                 valid_size=64,
+                 embedding_size=50,
+                 valid_size=8,
                  valid_window=100,
-                 num_sampled=64,
-                 num_steps = 1000001
+                 num_sampled=4096,
+                 num_steps = 100001
                 ):
         self.filenames = filenames
         self.word_list = []
@@ -57,8 +57,8 @@ class Embedder:
     def build_embedding(self):
         self.read_data()
         self.build_dataset()
-        self.test_data()
-        self.train_data()
+        ##self.test_data()
+        return self.train_data()
 
     def read_data(self):
         """Load the data from each line and put it in a list."""
@@ -200,14 +200,15 @@ class Embedder:
                                 close_word = self.reverse_dictionary[nearest[k]]
                                 log = '%s %s,' % (log, close_word)
                             print(log)
-                final_embeddings = self.normalized_embeddings.eval()
+                return self.normalized_embeddings.eval()
+                ##final_embeddings = self.normalized_embeddings.eval()
 
     def train_data(self):
         self.create_graph()
-        self.run_graph()
+        return self.run_graph()
 
 if __name__ == "__main__":
     os.chdir('..')
     os.chdir('Datasets')
     temp = Embedder()
-    temp.build_embedding()
+    print(temp.build_embedding())
