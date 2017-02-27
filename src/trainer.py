@@ -64,6 +64,7 @@ class Trainer:
     def build_dataset(self):
         """Converts each word in the data to its numerical representation."""
         for line in self.word_list:
+            ##TODO: Fix this so that it is just the length of the line.
             temp_line = np.zeros(shape=(len(line) + self.window_size, self.embedding_dimensions),
                                  dtype=np.float)
             for key, word in enumerate(line):
@@ -87,7 +88,8 @@ class Trainer:
         self.train_graph = TrainGraph(kernel_sizes,
                                       self.embedding_dimensions,
                                       self.first_layer_depth,
-                                      self.second_layer_depth)
+                                      self.second_layer_depth,
+                                      self.window_size)
 
 class ConvAndReLu:
     """Contains all of the steps for one convolution with ReLu."""
@@ -100,52 +102,69 @@ class ConvAndReLu:
         self.hidden = tf.nn.relu(self.convolution + self.biases)
 
 class TrainGraph:
+    """Made for containing the graphs data definitions and general callables."""
     def __init__(self, kernel_sizes, embedding_dimensions,
-                 first_layer_depth, second_layer_depth):
-        ## Inputs of form [sentence_length, window_size, ]
+                 first_layer_depth, second_layer_depth,
+                 window_size):
+        self.embedding_dimensions = embedding_dimensions
+        self.window_size = window_size
+        self.kernel_sizes = kernel_sizes
+        self.first_layer_depth = first_layer_depth
+        self.second_layer_depth = second_layer_depth
+        self.conv_layer_1 = None
+        self.conv_layer_2 = None
+        ##self.temp_array = tf.placeholder(tf.float32, shape=[5, embedding_dimensions])
+        self.temp_array = None
+        self.combined_layer = None
+        ## Inputs of form [sentence_length + window_size, embedding_dimensions, 1]
         self.input_data = tf.placeholder(tf.float32, shape=[None, embedding_dimensions])
+        ##TODO: Make input_data_padded to use in body_loop. Use tf.pad.
+        ## Need to throw in a tf.while_loop here to step through sentence_length and
+        ## generate smaller tensors of size [window_size, embedding_dimensions, 1]
+        self.sentence_length = tf.shape(self.input_data)[0]
+        self.i = tf.constant(0)
+        self.condition = lambda i: tf.less(self.i, self.sentence_length)
+        self.body = self.body_loop
+        ## This is where the logits are made.
+        ## self.logits = tf.while_loop(self.condition, self.body, [self.i])
+        ## Followed by the loss calculation.
+        ## loss = tf.losses.mean_squared_error(self.input_data, self.logits)
+        ## And finally here our optimizer.
+        ## optimizer = tf.train.GradientDescentOptimizer(0.05).minimize(loss)
 
-        self.conv_layer_1 = [ConvAndReLu(kernel_sizes['1x1'], embedding_dimensions,
-                                         first_layer_depth, self.input_data),
-                             ConvAndReLu(kernel_sizes['2x2'], embedding_dimensions,
-                                         first_layer_depth, self.input_data),
-                             ConvAndReLu(kernel_sizes['3x3'], embedding_dimensions,
-                                         first_layer_depth, self.input_data),
-                             ConvAndReLu(kernel_sizes['4x4'], embedding_dimensions,
-                                         first_layer_depth, self.input_data)]
+    def body_loop(self):
+        """The main body of the graph that will be called to generate output."""
+        self.temp_array = tf.slice(self.input_data,
+                                   [self.i, 0, 0],
+                                   [self.window_size, self.embedding_dimensions, 1])
+        self.conv_layer_1 = [ConvAndReLu(self.kernel_sizes['1x1'], self.embedding_dimensions,
+                                         self.first_layer_depth, self.temp_array),
+                             ConvAndReLu(self.kernel_sizes['2x2'], self.embedding_dimensions,
+                                         self.first_layer_depth, self.temp_array),
+                             ConvAndReLu(self.kernel_sizes['3x3'], self.embedding_dimensions,
+                                         self.first_layer_depth, self.temp_array),
+                             ConvAndReLu(self.kernel_sizes['4x4'], self.embedding_dimensions,
+                                         self.first_layer_depth, self.temp_array)]
 
-        self.conv_layer_2 = [ConvAndReLu(kernel_sizes['1x1'], first_layer_depth,
-                                         second_layer_depth, self.conv_layer_1[0].hidden),
-                             ConvAndReLu(kernel_sizes['1x1'], first_layer_depth,
-                                         second_layer_depth, self.conv_layer_1[1].hidden),
-                             ConvAndReLu(kernel_sizes['1x1'], first_layer_depth,
-                                         second_layer_depth, self.conv_layer_1[2].hidden),
-                             ConvAndReLu(kernel_sizes['1x1'], first_layer_depth,
-                                         second_layer_depth, self.conv_layer_1[3].hidden)]
-        ## Weights for the first set of convolutions.
-        self.weights_1x1 = tf.Variable(tf.truncated_normal(
-            [kernel_sizes['1x1'], embedding_dimensions, first_layer_depth]))
-        self.weights_2x2 = tf.Variable(tf.truncated_normal(
-            [kernel_sizes['2x2'], embedding_dimensions, first_layer_depth]))
-        self.weights_3x3 = tf.Variable(tf.truncated_normal(
-            [kernel_sizes['3x3'], embedding_dimensions, first_layer_depth]))
-        self.weights_4x4 = tf.Variable(tf.truncated_normal(
-            [kernel_sizes['4x4'], embedding_dimensions, first_layer_depth]))
-        ## Biases for the first set of hidden layers.
-        self.biases_1x1 = tf.Variable(tf.zeros([first_layer_depth]))
-        self.biases_2x2 = tf.Variable(tf.zeros([first_layer_depth]))
-        self.biases_3x3 = tf.Variable(tf.zeros([first_layer_depth]))
-        self.biases_4x4 = tf.Variable(tf.zeros([first_layer_depth]))
-        ## First set of convolutions.
-        self.conv_1x1 = tf.nn.conv1d(self.input_data, self.weights_1x1, 1, padding='SAME')
-        self.conv_2x2 = tf.nn.conv1d(self.input_data, self.weights_2x2, 1, padding='SAME')
-        self.conv_3x3 = tf.nn.conv1d(self.input_data, self.weights_3x3, 1, padding='SAME')
-        self.conv_4x4 = tf.nn.conv1d(self.input_data, self.weights_4x4, 1, padding='SAME')
-        ## First hidden layer.
-        self.hidden_1x1 = tf.nn.relu(self.conv_1x1 + self.biases_1x1)
-        self.hidden_2x2 = tf.nn.relu(self.conv_2x2 + self.biases_2x2)
-        self.hidden_3x3 = tf.nn.relu(self.conv_3x3 + self.biases_3x3)
-        self.hidden_4x4 = tf.nn.relu(self.conv_4x4 + self.biases_4x4)
+        self.conv_layer_2 = [ConvAndReLu(self.kernel_sizes['1x1'], self.first_layer_depth,
+                                         self.second_layer_depth, self.conv_layer_1[0].hidden),
+                             ConvAndReLu(self.kernel_sizes['1x1'], self.first_layer_depth,
+                                         self.second_layer_depth, self.conv_layer_1[1].hidden),
+                             ConvAndReLu(self.kernel_sizes['1x1'], self.first_layer_depth,
+                                         self.second_layer_depth, self.conv_layer_1[2].hidden),
+                             ConvAndReLu(self.kernel_sizes['1x1'], self.first_layer_depth,
+                                         self.second_layer_depth, self.conv_layer_1[3].hidden)]
+
+        ## This is wrong, need to put in max pools here to reduce each one
+        ## down to [1, second_layer_depth]
+
+        self.combined_layer = tf.stack([tf.stack(self.conv_layer_2[:2], axis=0),
+                                        tf.stack(self.conv_layer_2[2:], axis=0)], axis=0)
+
+        ## Max pool here as well from [2, 2, second_layer_depth] to [1, second_layer_depth]
+        ## Then add a fully connected layer to go from second_layer_depth to
+        ## our embedding size.
+        tf.add(self.i, 1)
 
 
 
