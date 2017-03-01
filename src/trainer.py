@@ -111,26 +111,35 @@ class TrainGraph:
         self.kernel_sizes = kernel_sizes
         self.first_layer_depth = first_layer_depth
         self.second_layer_depth = second_layer_depth
+        self.combined_layer_depth = second_layer_depth * window_size
         self.conv_layer_1 = None
         self.conv_layer_2 = None
         ##self.temp_array = tf.placeholder(tf.float32, shape=[5, embedding_dimensions])
         self.temp_array = None
-        self.combined_layer = None
+        self.combined_layer_1 = None
+        self.combined_layer_2 = None
+        self.flattened_layer_1 = None
+        self.hidden_layer = None
+        self.weights = tf.Variable(tf.truncated_normal(
+            [self.combined_layer_depth, self.embedding_dimensions], stddev=0.1))
+        self.biases = tf.Variable(tf.zeros([self.embedding_dimensions]))
         ## Inputs of form [sentence_length + window_size, embedding_dimensions, 1]
         self.input_data = tf.placeholder(tf.float32, shape=[None, embedding_dimensions])
-        ##TODO: Make input_data_padded to use in body_loop. Use tf.pad.
         ## Need to throw in a tf.while_loop here to step through sentence_length and
         ## generate smaller tensors of size [window_size, embedding_dimensions, 1]
         self.sentence_length = tf.shape(self.input_data)[0]
+        ##TODO: Make input_data_padded to use in body_loop. Use tf.pad.
+        self.logits = (tf.zeros([0, embedding_dimensions]))
         self.i = tf.constant(0)
         self.condition = lambda i: tf.less(self.i, self.sentence_length)
         self.body = self.body_loop
+        self.looper = tf.while_loop(self.condition, self.body, [self.i])
         ## This is where the logits are made.
         ## self.logits = tf.while_loop(self.condition, self.body, [self.i])
         ## Followed by the loss calculation.
-        ## loss = tf.losses.mean_squared_error(self.input_data, self.logits)
+        self.loss = tf.losses.mean_squared_error(self.input_data, self.logits)
         ## And finally here our optimizer.
-        ## optimizer = tf.train.GradientDescentOptimizer(0.05).minimize(loss)
+        self.optimizer = tf.train.GradientDescentOptimizer(0.05).minimize(self.loss)
 
     def body_loop(self):
         """The main body of the graph that will be called to generate output."""
@@ -155,15 +164,25 @@ class TrainGraph:
                              ConvAndReLu(self.kernel_sizes['1x1'], self.first_layer_depth,
                                          self.second_layer_depth, self.conv_layer_1[3].hidden)]
 
-        ## This is wrong, need to put in max pools here to reduce each one
-        ## down to [1, second_layer_depth]
+        ## Instead, lets try just flattening each layer and using that for the combined.
+        self.flattened_layer_1 = [tf.reshape(self.conv_layer_2[0], [-1]),
+                                  tf.reshape(self.conv_layer_2[1], [-1]),
+                                  tf.reshape(self.conv_layer_2[2], [-1]),
+                                  tf.reshape(self.conv_layer_2[3], [-1])]
 
-        self.combined_layer = tf.stack([tf.stack(self.conv_layer_2[:2], axis=0),
-                                        tf.stack(self.conv_layer_2[2:], axis=0)], axis=0)
+        self.combined_layer_1 = tf.stack([tf.stack(self.flattened_layer_1[:2], axis=0),
+                                          tf.stack(self.flattened_layer_1[2:], axis=0)], axis=0)
 
         ## Max pool here as well from [2, 2, second_layer_depth] to [1, second_layer_depth]
         ## Then add a fully connected layer to go from second_layer_depth to
         ## our embedding size.
+
+        self.combined_layer_2 = tf.nn.max_pool(self.combined_layer_1,
+                                               [2, 2, 1, 1],
+                                               [2, 2, 1, 1],
+                                               padding='SAME')
+        self.hidden_layer = tf.nn.relu(self.weights + self.biases)
+        self.logits = tf.concat([self.logits, self.hidden_layer], 0)
         tf.add(self.i, 1)
 
 
