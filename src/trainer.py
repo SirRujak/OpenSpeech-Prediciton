@@ -64,15 +64,14 @@ class Trainer:
     def build_dataset(self):
         """Converts each word in the data to its numerical representation."""
         for line in self.word_list:
-            ##TODO: Fix this so that it is just the length of the line.
-            temp_line = np.zeros(shape=(len(line) + self.window_size, self.embedding_dimensions),
+            temp_line = np.zeros(shape=(len(line), self.embedding_dimensions),
                                  dtype=np.float)
             for key, word in enumerate(line):
                 if word in self.embedding.dictionary:
                     index = self.embedding.dictionary[word]
                 else:
                     index = 0  # dictionary['UNK']
-                temp_line[key + 5] = self.embedding.embedding[index]
+                temp_line[key] = self.embedding.embedding[index]
             self.train_data.append(index)
         ## Clearing out the data that won't be used.
         self.word_list = list()
@@ -125,7 +124,6 @@ class TrainGraph:
         ## Inputs of form [sentence_length + window_size, embedding_dimensions, 1]
         self.input_data = tf.placeholder(tf.float32, shape=[None, embedding_dimensions])
         self.sentence_length = tf.shape(self.input_data)[0]
-        ##TODO: Make input_data_padded to use in body_loop. Use tf.pad.
         self.paddings = [1, 0]
         ## Generate smaller tensors of size [window_size, embedding_dimensions, 1]
         self.input_data_padded = tf.pad(self.input_data, self.paddings, "CONSTANT")
