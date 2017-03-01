@@ -41,19 +41,21 @@ class Trainer:
         self.first_layer_depth = train_info['first_layer_depth']
         self.second_layer_depth = train_info['second_layer_depth']
         self.graph = tf.Graph()
-        self.saver = tf.train.Saver()
         self.session = tf.Session(graph=self.graph)
         self.steps_to_take = train_info['steps_to_take']
         self.train_graph = None
         self.setup()
+        self.saver = tf.train.Saver()
         self.batch_generator = BatchGenerator(self.train_data)
 
     def setup(self):
         self.read_data()
         self.build_dataset()
         """Creates the graph."""
+        print('Building computational graph.')
         with self.graph.as_default():
             self.generate_graph()
+        print('Graph built.')
 
     def read_data(self):
         """Load the data from each line and put it in a list of lists.
@@ -68,7 +70,8 @@ class Trainer:
 
     def build_dataset(self):
         """Converts each word in the data to its numerical representation."""
-        for line in self.word_list:
+        print('Building dataset. This may take a while.')
+        for key, line in enumerate(self.word_list):
             temp_line = np.zeros(shape=(len(line), self.embedding_dimensions),
                                  dtype=np.float)
             for key, word in enumerate(line):
@@ -78,8 +81,11 @@ class Trainer:
                     index = 0  # dictionary['UNK']
                 temp_line[key] = self.embedding.embedding[index]
             self.train_data.append(index)
+            if key % 10000 == 0:
+                print('Processed %d lines.' % key)
         ## Clearing out the data that won't be used.
         self.word_list = list()
+        print('Dataset built.')
 
     def generate_graph(self):
         """Builds the tensorflow graph representation. It contains:
@@ -102,6 +108,7 @@ class Trainer:
             _, l, predictions = session.run(
                 [optimizer, loss, train_prediction], feed_dict=feed_dict)
             if step % 1000 == 0:
+                print('Processed %d lines. Saving model.' % step)
                 ## Append the step number to the checkpoint name:
                 self.saver.save(self.session, 'Word-Prediction-model', global_step=step)
 
