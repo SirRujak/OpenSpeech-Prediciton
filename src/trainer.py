@@ -32,7 +32,6 @@ class Trainer:
     """Main class for generating a NN for predicting a word given the
         previous words fed to it."""
     def __init__(self, train_data_filenames, embedding, train_info):
-        self.saver = tf.train.Saver()
         self.word_list = list()
         self.train_data_filenames = train_data_filenames
         self.embedding = embedding
@@ -41,11 +40,17 @@ class Trainer:
         self.window_size = train_info['window_size']
         self.first_layer_depth = train_info['first_layer_depth']
         self.second_layer_depth = train_info['second_layer_depth']
-        self.batch_generator = BatchGenerator(self.train_data)
         self.graph = tf.Graph()
+        self.saver = tf.train.Saver()
+        self.session = tf.Session(graph=self.graph)
+        self.steps_to_take = train_info['steps_to_take']
         self.train_graph = None
+        self.setup()
+        self.batch_generator = BatchGenerator(self.train_data)
 
     def setup(self):
+        self.read_data()
+        self.build_dataset()
         """Creates the graph."""
         with self.graph.as_default():
             self.generate_graph()
@@ -89,6 +94,16 @@ class Trainer:
                                       self.first_layer_depth,
                                       self.second_layer_depth,
                                       self.window_size)
+
+    def train(self):
+        for step in range(self.steps_to_take):
+            batch_data = self.batch_generator.next_batch()
+            feed_dict = {self.train_data:batch_data}
+            _, l, predictions = session.run(
+                [optimizer, loss, train_prediction], feed_dict=feed_dict)
+            if step % 1000 == 0:
+                ## Append the step number to the checkpoint name:
+                self.saver.save(self.session, 'Word-Prediction-model', global_step=step)
 
 class ConvAndReLu:
     """Contains all of the steps for one convolution with ReLu."""
@@ -193,5 +208,7 @@ if __name__ == "__main__":
                             'clean_en_US.twitter.txt']
     TRAIN_INFO = {'window_size':5,
                   'first_layer_depth':16,
-                  'second_layer_depth': 32,}
+                  'second_layer_depth': 32,
+                  'steps_to_take': 20000}
     TRAINER = Trainer(TRAIN_DATA_FILENAMES, TRAINED_EMBEDDING, TRAIN_INFO)
+    TRAINER.train()
