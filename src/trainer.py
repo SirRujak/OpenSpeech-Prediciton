@@ -114,7 +114,6 @@ class TrainGraph:
         self.combined_layer_depth = second_layer_depth * window_size
         self.conv_layer_1 = None
         self.conv_layer_2 = None
-        ##self.temp_array = tf.placeholder(tf.float32, shape=[5, embedding_dimensions])
         self.temp_array = None
         self.combined_layer_1 = None
         self.combined_layer_2 = None
@@ -125,17 +124,17 @@ class TrainGraph:
         self.biases = tf.Variable(tf.zeros([self.embedding_dimensions]))
         ## Inputs of form [sentence_length + window_size, embedding_dimensions, 1]
         self.input_data = tf.placeholder(tf.float32, shape=[None, embedding_dimensions])
-        ## Need to throw in a tf.while_loop here to step through sentence_length and
-        ## generate smaller tensors of size [window_size, embedding_dimensions, 1]
         self.sentence_length = tf.shape(self.input_data)[0]
         ##TODO: Make input_data_padded to use in body_loop. Use tf.pad.
+        self.paddings = [1, 0]
+        ## Generate smaller tensors of size [window_size, embedding_dimensions, 1]
+        self.input_data_padded = tf.pad(self.input_data, self.paddings, "CONSTANT")
         self.logits = (tf.zeros([0, embedding_dimensions]))
         self.i = tf.constant(0)
         self.condition = lambda i: tf.less(self.i, self.sentence_length)
         self.body = self.body_loop
-        self.looper = tf.while_loop(self.condition, self.body, [self.i])
         ## This is where the logits are made.
-        ## self.logits = tf.while_loop(self.condition, self.body, [self.i])
+        self.looper = tf.while_loop(self.condition, self.body, [self.i])
         ## Followed by the loss calculation.
         self.loss = tf.losses.mean_squared_error(self.input_data, self.logits)
         ## And finally here our optimizer.
@@ -143,7 +142,7 @@ class TrainGraph:
 
     def body_loop(self):
         """The main body of the graph that will be called to generate output."""
-        self.temp_array = tf.slice(self.input_data,
+        self.temp_array = tf.slice(self.input_data_padded,
                                    [self.i, 0, 0],
                                    [self.window_size, self.embedding_dimensions, 1])
         self.conv_layer_1 = [ConvAndReLu(self.kernel_sizes['1x1'], self.embedding_dimensions,
