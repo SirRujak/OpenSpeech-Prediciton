@@ -2,6 +2,7 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
+import pickle
 import os
 import numpy as np
 import tensorflow as tf
@@ -31,7 +32,9 @@ class BatchGenerator(object):
 class Trainer:
     """Main class for generating a NN for predicting a word given the
         previous words fed to it."""
-    def __init__(self, train_data_filenames, embedding, train_info):
+    def __init__(self, train_data_filenames, embedding,
+                 train_info, tf_dataset_filename='tf-dataset.pickle'):
+        self.tf_dataset_filename = tf_dataset_filename
         self.word_list = list()
         self.train_data_filenames = train_data_filenames
         self.embedding = embedding
@@ -44,14 +47,20 @@ class Trainer:
         self.session = tf.Session(graph=self.graph)
         self.steps_to_take = train_info['steps_to_take']
         self.train_graph = None
+        self.batch_generator = None
         self.setup()
         self.saver = tf.train.Saver()
-        self.batch_generator = BatchGenerator(self.train_data)
 
     def setup(self):
-        self.read_data()
-        self.build_dataset()
         """Creates the graph."""
+        if not os.path.exists(self.tf_dataset_filename):
+            self.read_data()
+            self.maybe_build_dataset()
+        else:
+            print('Found embedding at %s. Skipping generation. Loading.' % self.tf_dataset_filename)
+            with open(self.tf_dataset_filename, 'rb') as temp_file:
+                self.train_data = pickle.load(temp_file)
+        self.batch_generator = BatchGenerator(self.train_data)
         print('Building computational graph.')
         with self.graph.as_default():
             self.generate_graph()
@@ -68,10 +77,10 @@ class Trainer:
                     self.word_list.append(temp_line)
         print('List is %d words long.' % len(self.word_list))
 
-    def build_dataset(self):
+    def maybe_build_dataset(self):
         """Converts each word in the data to its numerical representation."""
         print('Building dataset. This may take a while.')
-        for key, line in enumerate(self.word_list):
+        for line_number, line in enumerate(self.word_list):
             temp_line = np.zeros(shape=(len(line), self.embedding_dimensions),
                                  dtype=np.float)
             for key, word in enumerate(line):
@@ -80,11 +89,16 @@ class Trainer:
                 else:
                     index = 0  # dictionary['UNK']
                 temp_line[key] = self.embedding.embedding[index]
-            self.train_data.append(index)
-            if key % 10000 == 0:
-                print('Processed %d lines.' % key)
+            self.train_data.append(temp_line)
+            if line_number % 100000 == 0:
+                print('Processed %d lines.' % line_number)
+            if line_number == 200000:
+                break
         ## Clearing out the data that won't be used.
         self.word_list = list()
+        ## Save the dataset.
+        with open(self.tf_dataset_filename, 'wb') as temp_file:
+            pickle.dump(self.train_data, temp_file)
         print('Dataset built.')
 
     def generate_graph(self):
@@ -104,22 +118,26 @@ class Trainer:
     def train(self):
         for step in range(self.steps_to_take):
             batch_data = self.batch_generator.next_batch()
+            ##print(batch_data)
             feed_dict = {self.train_data:batch_data}
-            _, l, predictions = session.run(
+            _, minibatch_loss, predictions = session.run(
                 [optimizer, loss, train_prediction], feed_dict=feed_dict)
             if step % 1000 == 0:
                 print('Processed %d lines. Saving model.' % step)
                 ## Append the step number to the checkpoint name:
                 self.saver.save(self.session, 'Word-Prediction-model', global_step=step)
+                print('Minibatch loss: %d at step %d.' % (minibatch_loss, step))
 
 class ConvAndReLu:
     """Contains all of the steps for one convolution with ReLu."""
     def __init__(self, kernel_size, embedding_dimensions,
                  final_layer_depth, input_data):
         self.weights = tf.Variable(tf.truncated_normal(
-            [kernel_size, embedding_dimensions, final_layer_depth]))
+            [1, kernel_size, embedding_dimensions, final_layer_depth]))
         self.biases = tf.Variable(tf.zeros([final_layer_depth]))
-        self.convolution = tf.nn.conv1d(input_data, self.weights, 1, padding='SAME')
+        print("ERROR HERE:", tf.shape(input_data), tf.shape(self.weights))
+        self.convolution = tf.nn.conv2d(input_data,
+                                        self.weights, [1, 1, 1, 1], padding='SAME')
         self.hidden = tf.nn.relu(self.convolution + self.biases)
 
 class TrainGraph:
@@ -146,9 +164,11 @@ class TrainGraph:
         ## Inputs of form [sentence_length + window_size, embedding_dimensions, 1]
         self.input_data = tf.placeholder(tf.float32, shape=[None, embedding_dimensions])
         self.sentence_length = tf.shape(self.input_data)[0]
-        self.paddings = [1, 0]
+        ##self.paddings = [1, 0]
+        self.padding = tf.zeros([self.window_size, self.embedding_dimensions])
         ## Generate smaller tensors of size [window_size, embedding_dimensions, 1]
-        self.input_data_padded = tf.pad(self.input_data, self.paddings, "CONSTANT")
+        ##self.input_data_padded = tf.pad(self.input_data, self.paddings, "CONSTANT")
+        self.input_data_padded = tf.concat([self.padding, self.input_data], 0)
         self.logits = (tf.zeros([0, embedding_dimensions]))
         self.i = tf.constant(0)
         self.condition = lambda i: tf.less(self.i, self.sentence_length)
@@ -160,11 +180,12 @@ class TrainGraph:
         ## And finally here our optimizer.
         self.optimizer = tf.train.GradientDescentOptimizer(0.05).minimize(self.loss)
 
-    def body_loop(self):
+    def body_loop(self, _):
         """The main body of the graph that will be called to generate output."""
-        self.temp_array = tf.slice(self.input_data_padded,
-                                   [self.i, 0, 0],
-                                   [self.window_size, self.embedding_dimensions, 1])
+        self.temp_array = tf.expand_dims(
+            tf.expand_dims(
+                tf.slice(self.input_data_padded, [self.i, 0],
+                         [self.window_size, self.embedding_dimensions]), 0), 0)
         self.conv_layer_1 = [ConvAndReLu(self.kernel_sizes['1x1'], self.embedding_dimensions,
                                          self.first_layer_depth, self.temp_array),
                              ConvAndReLu(self.kernel_sizes['2x2'], self.embedding_dimensions,
@@ -184,21 +205,23 @@ class TrainGraph:
                                          self.second_layer_depth, self.conv_layer_1[3].hidden)]
 
         ## Instead, lets try just flattening each layer and using that for the combined.
-        self.flattened_layer_1 = [tf.reshape(self.conv_layer_2[0], [-1]),
-                                  tf.reshape(self.conv_layer_2[1], [-1]),
-                                  tf.reshape(self.conv_layer_2[2], [-1]),
-                                  tf.reshape(self.conv_layer_2[3], [-1])]
+        self.flattened_layer_1 = [tf.reshape(self.conv_layer_2[0].hidden, [-1]),
+                                  tf.reshape(self.conv_layer_2[1].hidden, [-1]),
+                                  tf.reshape(self.conv_layer_2[2].hidden, [-1]),
+                                  tf.reshape(self.conv_layer_2[3].hidden, [-1])]
 
-        self.combined_layer_1 = tf.stack([tf.stack(self.flattened_layer_1[:2], axis=0),
-                                          tf.stack(self.flattened_layer_1[2:], axis=0)], axis=0)
+        self.combined_layer_1 = tf.expand_dims(
+            tf.stack([tf.stack(self.flattened_layer_1[:2], axis=0),
+                      tf.stack(self.flattened_layer_1[2:], axis=0)], axis=0), 0)
 
-        ## Max pool here as well from [2, 2, second_layer_depth] to [1, second_layer_depth]
+        ## Max pool here as well from [1, 2, 2, second_layer_depth] to [1, second_layer_depth]
         ## Then add a fully connected layer to go from second_layer_depth to
         ## our embedding size.
 
+
         self.combined_layer_2 = tf.nn.max_pool(self.combined_layer_1,
-                                               [2, 2, 1, 1],
-                                               [2, 2, 1, 1],
+                                               [1, 2, 2, 1],
+                                               [1, 2, 2, 1],
                                                padding='SAME')
         self.hidden_layer = tf.nn.relu(self.weights + self.biases)
         self.logits = tf.concat([self.logits, self.hidden_layer], 0)
@@ -218,4 +241,5 @@ if __name__ == "__main__":
                   'second_layer_depth': 32,
                   'steps_to_take': 20000}
     TRAINER = Trainer(TRAIN_DATA_FILENAMES, TRAINED_EMBEDDING, TRAIN_INFO)
+    print(TRAINER.batch_generator.next_batch)
     TRAINER.train()
