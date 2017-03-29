@@ -49,7 +49,6 @@ class Trainer:
         self.train_graph = None
         self.batch_generator = None
         self.setup()
-        self.saver = tf.train.Saver()
 
     def setup(self):
         """Creates the graph."""
@@ -116,17 +115,31 @@ class Trainer:
                                       self.window_size)
 
     def train(self):
-        for step in range(self.steps_to_take):
-            batch_data = self.batch_generator.next_batch()
-            ##print(batch_data)
-            feed_dict = {self.train_data:batch_data}
-            _, minibatch_loss, predictions = session.run(
+        with self.session.as_default():
+            tf.global_variables_initializer().run(session=self.session)
+            self.saver = tf.train.Saver()
+            batch_header_size = 5
+            batch_header = np.zeros((batch_header_size, self.embedding_dimensions))
+            for step in range(self.steps_to_take):
+                batch_data = self.batch_generator.next_batch()
+                ## FIXME: Fixing the itteration issue.
+                batch_len = np.shape(batch_data)[0]
+                batch_data = np.insert(batch_data, 0, 0)
+                for temp_index in xrange(batch_len):
+                    feed_dict = {}
+                    feed[input_data] = batch_data[i:i + batch_header_size]
+                    feed[output_data] = batch_data[i + batch_header_size + 1]
+                _, minibatch_loss, predictions = self.session.run(
                 [optimizer, loss, train_prediction], feed_dict=feed_dict)
-            if step % 1000 == 0:
-                print('Processed %d lines. Saving model.' % step)
-                ## Append the step number to the checkpoint name:
-                self.saver.save(self.session, 'Word-Prediction-model', global_step=step)
-                print('Minibatch loss: %d at step %d.' % (minibatch_loss, step))
+
+                ##feed_dict = {self.input_data:batch_data}
+                ##_, minibatch_loss, predictions = session.run(
+                ##   [optimizer, loss, train_prediction], feed_dict=feed_dict)
+                if step % 1000 == 0:
+                    print('Processed %d lines. Saving model.' % step)
+                    ## Append the step number to the checkpoint name:
+                    self.saver.save(self.session, 'Word-Prediction-model', global_step=step)
+                    print('Minibatch loss: %d at step %d.' % (minibatch_loss, step))
 
 class ConvAndReLu:
     """Contains all of the steps for one convolution with ReLu."""
@@ -135,7 +148,6 @@ class ConvAndReLu:
         self.weights = tf.Variable(tf.truncated_normal(
             [1, kernel_size, embedding_dimensions, final_layer_depth]))
         self.biases = tf.Variable(tf.zeros([final_layer_depth]))
-        print("ERROR HERE:", tf.shape(input_data), tf.shape(self.weights))
         self.convolution = tf.nn.conv2d(input_data,
                                         self.weights, [1, 1, 1, 1], padding='SAME')
         self.hidden = tf.nn.relu(self.convolution + self.biases)
@@ -151,41 +163,37 @@ class TrainGraph:
         self.first_layer_depth = first_layer_depth
         self.second_layer_depth = second_layer_depth
         self.combined_layer_depth = second_layer_depth * window_size
-        self.conv_layer_1 = None
-        self.conv_layer_2 = None
-        self.temp_array = None
-        self.combined_layer_1 = None
-        self.combined_layer_2 = None
-        self.flattened_layer_1 = None
-        self.hidden_layer = None
         self.weights = tf.Variable(tf.truncated_normal(
             [self.combined_layer_depth, self.embedding_dimensions], stddev=0.1))
         self.biases = tf.Variable(tf.zeros([self.embedding_dimensions]))
         ## Inputs of form [sentence_length + window_size, embedding_dimensions, 1]
-        self.input_data = tf.placeholder(tf.float32, shape=[None, embedding_dimensions])
-        self.sentence_length = tf.shape(self.input_data)[0]
+        self.input_data = tf.placeholder(tf.float32,
+                                         shape=[window_size, embedding_dimensions],
+                                         name="input_data")
+        output_data = tf.placeholder(tf.float32,
+                                     shape=[1, self.embedding_dimensions],
+                                     name="output_data")
+        ##self.sentence_length = tf.shape(self.input_data)[0]
         ##self.paddings = [1, 0]
-        self.padding = tf.zeros([self.window_size, self.embedding_dimensions])
+        ##self.padding = tf.zeros([self.window_size, self.embedding_dimensions])
         ## Generate smaller tensors of size [window_size, embedding_dimensions, 1]
         ##self.input_data_padded = tf.pad(self.input_data, self.paddings, "CONSTANT")
-        self.input_data_padded = tf.concat([self.padding, self.input_data], 0)
-        self.logits = (tf.zeros([0, embedding_dimensions]))
-        self.i = tf.constant(0)
-        self.condition = lambda i: tf.less(self.i, self.sentence_length)
-        self.body = self.body_loop
+        ##self.input_data_padded = tf.concat([self.padding, self.input_data], 0)
+        self.logits = (tf.zeros([1, embedding_dimensions]))
+        ##self.i = tf.constant(0)
+        ##self.condition = lambda i: tf.less(self.i, self.sentence_length)
+        self.body_loop()
         ## This is where the logits are made.
-        self.looper = tf.while_loop(self.condition, self.body, [self.i])
+        ##self.looper = tf.while_loop(self.condition, self.body, [self.i])
         ## Followed by the loss calculation.
-        self.loss = tf.losses.mean_squared_error(self.input_data, self.logits)
+        self.loss = tf.losses.mean_squared_error(self.logits, output_data)
         ## And finally here our optimizer.
         self.optimizer = tf.train.GradientDescentOptimizer(0.05).minimize(self.loss)
 
-    def body_loop(self, _):
+    def body_loop(self):
         """The main body of the graph that will be called to generate output."""
         self.temp_array = tf.expand_dims(
-            tf.expand_dims(
-                tf.slice(self.input_data_padded, [self.i, 0],
-                         [self.window_size, self.embedding_dimensions]), 0), 0)
+            tf.expand_dims(self.input_data, 0), 0)
         self.conv_layer_1 = [ConvAndReLu(self.kernel_sizes['1x1'], self.embedding_dimensions,
                                          self.first_layer_depth, self.temp_array),
                              ConvAndReLu(self.kernel_sizes['2x2'], self.embedding_dimensions,
@@ -223,9 +231,11 @@ class TrainGraph:
                                                [1, 2, 2, 1],
                                                [1, 2, 2, 1],
                                                padding='SAME')
-        self.hidden_layer = tf.nn.relu(self.weights + self.biases)
-        self.logits = tf.concat([self.logits, self.hidden_layer], 0)
-        tf.add(self.i, 1)
+        print(tf.shape(self.combined_layer_2))
+        self.squeezed_layer = tf.squeeze(self.combined_layer_2, [0, 1])
+        self.logits = tf.nn.relu(tf.matmul(self.squeezed_layer, self.weights) + self.biases, name="Logits")
+        ##self.logits = tf.concat([self.logits, self.hidden_layer], 0)
+        ##tf.add(self.i, 1)
 
 
 
