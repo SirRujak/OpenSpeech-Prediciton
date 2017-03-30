@@ -43,12 +43,16 @@ class Trainer:
         self.window_size = train_info['window_size']
         self.first_layer_depth = train_info['first_layer_depth']
         self.second_layer_depth = train_info['second_layer_depth']
+        self.hidden_dimensions = train_info['hidden_dimensions']
+        self.num_test_examples = train_info['num_test_examples']
+        self.test_batches = list()
         self.graph = tf.Graph()
-        self.session = tf.Session(graph=self.graph)
         self.steps_to_take = train_info['steps_to_take']
         self.train_graph = None
         self.batch_generator = None
+        self.saver = None
         self.setup()
+        self.sess = tf.Session(graph=self.graph)
 
     def setup(self):
         """Creates the graph."""
@@ -60,6 +64,8 @@ class Trainer:
             with open(self.tf_dataset_filename, 'rb') as temp_file:
                 self.train_data = pickle.load(temp_file)
         self.batch_generator = BatchGenerator(self.train_data)
+        for _ in range(self.num_test_examples):
+            self.test_batches.append(self.batch_generator.next_batch())
         print('Building computational graph.')
         with self.graph.as_default():
             self.generate_graph()
@@ -112,34 +118,68 @@ class Trainer:
                                       self.embedding_dimensions,
                                       self.first_layer_depth,
                                       self.second_layer_depth,
-                                      self.window_size)
+                                      self.window_size,
+                                      self.hidden_dimensions)
+
+    def process_batch(self, batch_header_size,
+                      batch_header, batch_data, session):
+        batch_len = np.shape(batch_data)[0]
+        batch_data = np.concatenate((batch_header, batch_data), axis=0)
+        for temp_index in range(batch_len):
+            feed_input = batch_data[temp_index:temp_index + batch_header_size][:]
+            feed_output1 = batch_data[temp_index + batch_header_size]
+            ##print(batch_data[batch_header_size + temp_index])
+            feed_output = np.expand_dims(feed_output1, axis=0)
+            feed_dict = {}
+            feed_dict[self.train_graph.input_data] = feed_input
+            feed_dict[self.train_graph.output_data] = feed_output
+
+        _, minibatch_loss, logits = session.run(
+            [self.train_graph.optimizer,
+             self.train_graph.loss,
+             self.train_graph.logits], feed_dict=feed_dict)
+        return (minibatch_loss, logits)
 
     def train(self):
-        with self.session.as_default():
-            tf.global_variables_initializer().run(session=self.session)
+        ##
+        with self.sess as session:
+            tf.global_variables_initializer().run()
             self.saver = tf.train.Saver()
+            avg_error = 0
             batch_header_size = 5
             batch_header = np.zeros((batch_header_size, self.embedding_dimensions))
             for step in range(self.steps_to_take):
                 batch_data = self.batch_generator.next_batch()
-                ## FIXME: Fixing the itteration issue.
-                batch_len = np.shape(batch_data)[0]
-                batch_data = np.insert(batch_data, 0, 0)
-                for temp_index in xrange(batch_len):
-                    feed_dict = {}
-                    feed[input_data] = batch_data[i:i + batch_header_size]
-                    feed[output_data] = batch_data[i + batch_header_size + 1]
-                _, minibatch_loss, predictions = self.session.run(
-                [optimizer, loss, train_prediction], feed_dict=feed_dict)
+                ##print('Shape of batch_header: {}'.format(np.shape(batch_header)))
+                minibatch_loss, _ = self.process_batch(batch_header_size,
+                                                       batch_header,
+                                                       batch_data, session)
+                avg_error += minibatch_loss
 
                 ##feed_dict = {self.input_data:batch_data}
                 ##_, minibatch_loss, predictions = session.run(
                 ##   [optimizer, loss, train_prediction], feed_dict=feed_dict)
                 if step % 1000 == 0:
+                    avg_test_error = 0
+                    for test_item in self.test_batches:
+                        minibatch_loss, _ = self.process_batch(batch_header_size,
+                                                                    batch_header,
+                                                                    test_item, session)
+                        avg_test_error += minibatch_loss
+
+                    ##mean_squared_error = ((logits - feed_output) ** 2).mean(axis=None)
                     print('Processed %d lines. Saving model.' % step)
                     ## Append the step number to the checkpoint name:
-                    self.saver.save(self.session, 'Word-Prediction-model', global_step=step)
-                    print('Minibatch loss: %d at step %d.' % (minibatch_loss, step))
+                    self.saver.save(self.sess, 'Word-Prediction-model', global_step=step)
+                    print('Minibatch loss: {} at step {}.'.format(minibatch_loss, step))
+                    ##print('Mean squared error: {}'.format(mean_squared_error))
+                    print('Average train error: {}'.format(avg_error / 1000))
+                    print('Average test error: {}'.format(avg_test_error / self.num_test_examples))
+                    avg_error = 0
+                    ##print('Prediction: {}'.format(logits))
+                    ##print('Reality: {}'.format(feed_dict[self.train_graph.output_data]))
+                    ##print('Output: {}'.format(feed_output))
+                    ##print('Batch data: {}'.format(batch_data))
 
 class ConvAndReLu:
     """Contains all of the steps for one convolution with ReLu."""
@@ -156,23 +196,27 @@ class TrainGraph:
     """Made for containing the graphs data definitions and general callables."""
     def __init__(self, kernel_sizes, embedding_dimensions,
                  first_layer_depth, second_layer_depth,
-                 window_size):
+                 window_size, hidden_dimensions):
         self.embedding_dimensions = embedding_dimensions
         self.window_size = window_size
         self.kernel_sizes = kernel_sizes
         self.first_layer_depth = first_layer_depth
         self.second_layer_depth = second_layer_depth
         self.combined_layer_depth = second_layer_depth * window_size
+        self.hidden_dimensions = hidden_dimensions
+        self.hidden_weights = tf.Variable(tf.truncated_normal(
+            [self.combined_layer_depth, self.hidden_dimensions], stddev=0.1))
+        self.hidden_biases = tf.Variable(tf.zeros([self.hidden_dimensions]))
         self.weights = tf.Variable(tf.truncated_normal(
-            [self.combined_layer_depth, self.embedding_dimensions], stddev=0.1))
+            [self.hidden_dimensions, self.embedding_dimensions], stddev=0.1))
         self.biases = tf.Variable(tf.zeros([self.embedding_dimensions]))
         ## Inputs of form [sentence_length + window_size, embedding_dimensions, 1]
         self.input_data = tf.placeholder(tf.float32,
                                          shape=[window_size, embedding_dimensions],
                                          name="input_data")
-        output_data = tf.placeholder(tf.float32,
-                                     shape=[1, self.embedding_dimensions],
-                                     name="output_data")
+        self.output_data = tf.placeholder(tf.float32,
+                                          shape=[1, self.embedding_dimensions],
+                                          name="output_data")
         ##self.sentence_length = tf.shape(self.input_data)[0]
         ##self.paddings = [1, 0]
         ##self.padding = tf.zeros([self.window_size, self.embedding_dimensions])
@@ -186,9 +230,12 @@ class TrainGraph:
         ## This is where the logits are made.
         ##self.looper = tf.while_loop(self.condition, self.body, [self.i])
         ## Followed by the loss calculation.
-        self.loss = tf.losses.mean_squared_error(self.logits, output_data)
+        self.loss = tf.losses.mean_squared_error(self.output_data, self.logits)
+        ##self.loss = tf.losses.mean_pairwise_squared_error(self.output_data, self.logits)
+        ##self.loss = tf.reduce_mean(
+        ##    tf.nn.softmax_cross_entropy_with_logits(labels=self.output_data, logits=self.logits))
         ## And finally here our optimizer.
-        self.optimizer = tf.train.GradientDescentOptimizer(0.05).minimize(self.loss)
+        self.optimizer = tf.train.GradientDescentOptimizer(0.01).minimize(self.loss)
 
     def body_loop(self):
         """The main body of the graph that will be called to generate output."""
@@ -233,7 +280,9 @@ class TrainGraph:
                                                padding='SAME')
         print(tf.shape(self.combined_layer_2))
         self.squeezed_layer = tf.squeeze(self.combined_layer_2, [0, 1])
-        self.logits = tf.nn.relu(tf.matmul(self.squeezed_layer, self.weights) + self.biases, name="Logits")
+        self.hidden_layer = tf.nn.relu(tf.matmul(
+            self.squeezed_layer, self.hidden_weights) + self.hidden_biases, name="Logits")
+        self.logits = tf.matmul(self.hidden_layer, self.weights) + self.biases
         ##self.logits = tf.concat([self.logits, self.hidden_layer], 0)
         ##tf.add(self.i, 1)
 
@@ -249,7 +298,9 @@ if __name__ == "__main__":
     TRAIN_INFO = {'window_size':5,
                   'first_layer_depth':16,
                   'second_layer_depth': 32,
-                  'steps_to_take': 20000}
+                  'hidden_dimensions': 512,
+                  'steps_to_take': 200000,
+                  'num_test_examples': 10000}
     TRAINER = Trainer(TRAIN_DATA_FILENAMES, TRAINED_EMBEDDING, TRAIN_INFO)
     print(TRAINER.batch_generator.next_batch)
     TRAINER.train()
