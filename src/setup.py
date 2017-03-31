@@ -61,9 +61,9 @@ class DataBuilder:
         self.maybe_clean()
         self.maybe_calc_frequencies()
         self.maybe_generate_embedding()
-        self.maybe_build_sorted_dict()
+        ##self.maybe_build_sorted_dict()
         ##self.maybe_generate_sammon_dict()
-        return self.maybe_build_final()
+        ##return self.maybe_build_final()
 
     def maybe_generate_embedding(self):
         pass
@@ -293,8 +293,8 @@ class DataBuilder:
 
 
     def downloader(self):
-        self.maybe_download(self.w2v_url, self.w2v_file_name, self.w2v_size)
-        ##self.maybe_download(self.sk_url, self.sk_file_name, self.sk_size)
+        ##self.maybe_download(self.w2v_url, self.w2v_file_name, self.w2v_size)
+        self.maybe_download(self.sk_url, self.sk_file_name, self.sk_size)
 
     def maybe_download(self, url, filename, expected_bytes):
         """Download a file if not present, and make sure it's the right size."""
@@ -312,10 +312,12 @@ class DataBuilder:
             )
 
     def maybe_extract(self):
+        '''
         if not os.path.exists(self.w2v_file_name_extracted):
             self.extractor(self.w2v_file_name)
         else:
             print('Found %s, skipping.' % self.w2v_file_name_extracted)
+        '''
         self.extractor(self.sk_file_name)
 
     def extractor(self, filename):

@@ -31,7 +31,7 @@ class Embedder:
                  valid_size=8,
                  valid_window=100,
                  num_sampled=4096,
-                 num_steps=100001
+                 num_steps=500001
                 ):
         self.filenames = filenames
         self.word_list = []
