@@ -132,30 +132,37 @@ class Embedder:
         with self.graph.as_default(), tf.device('/cpu:0'):
 
             # Input data.
-            self.train_dataset = tf.placeholder(tf.int32, shape=[self.batch_size])
-            self.train_labels = tf.placeholder(tf.int32, shape=[self.batch_size, 1])
+            self.train_dataset = tf.placeholder(shape=[self.batch_size], dtype=tf.int32)
+            self.train_labels = tf.placeholder(shape=[self.batch_size, 1], dtype=tf.int32)
             self.valid_dataset = tf.constant(self.valid_examples, dtype=tf.int32)
 
             # Variables.
             self.embeddings = tf.Variable(
                 tf.random_uniform([self.vocabulary_size, self.embedding_size], -1.0, 1.0))
             self.softmax_weights = tf.Variable(
-                tf.truncated_normal([self.vocabulary_size, self.embedding_size],
-                                    stddev=1.0 / math.sqrt(self.embedding_size)))
+                tf.random_uniform([self.vocabulary_size, self.embedding_size], -1.0, 1.0))
             self.softmax_biases = tf.Variable(tf.zeros([self.vocabulary_size]))
 
             # Model.
             # Look up embeddings for inputs.
             self.embed = tf.nn.embedding_lookup(self.embeddings, self.train_dataset)
+            ##print(tf.DType.is_floating(self.embed))
+            ##self.embed = tf.nn.embedding_lookup(self.train_dataset, self.embeddings)
             # Compute the softmax loss, using a sample of the negative labels each time.
-            self.loss = tf.reduce_mean(
-                tf.nn.sampled_softmax_loss(self.softmax_weights,
-                                           self.softmax_biases,
-                                           self.embed,
-                                           self.train_labels,
-                                           self.num_sampled,
-                                           self.vocabulary_size))
-
+            ##self.loss = tf.reduce_mean(
+            ##    tf.nn.sampled_softmax_loss(self.softmax_weights,
+            ##                               self.softmax_biases,
+            ##                               self.train_labels,
+            ##                               self.embed,
+            ##                               self.num_sampled,
+            ##
+            ##                               self.vocabulary_size))
+            self.loss = tf.reduce_mean(tf.nn.nce_loss(self.softmax_weights,
+                                                      self.softmax_biases,
+                                                      self.train_labels,
+                                                      self.embed,
+                                                      self.num_sampled,
+                                                      self.vocabulary_size))
 
             # Optimizer.
             # Note: The optimizer will optimize the softmax_weights AND the embeddings.

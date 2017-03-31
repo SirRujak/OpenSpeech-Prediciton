@@ -163,8 +163,8 @@ class Trainer:
                     avg_test_error = 0
                     for test_item in self.test_batches:
                         minibatch_loss, _ = self.process_batch(batch_header_size,
-                                                                    batch_header,
-                                                                    test_item, session)
+                                                               batch_header,
+                                                               test_item, session)
                         avg_test_error += minibatch_loss
 
                     ##mean_squared_error = ((logits - feed_output) ** 2).mean(axis=None)
