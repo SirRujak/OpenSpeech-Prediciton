@@ -27,6 +27,13 @@ Then run:
 
 pip install --ignore-installed --upgrade https://storage.googleapis.com/tensorflow/windows/gpu/tensorflow_gpu-1.0.1-cp35-cp35m-win_amd64.whl
 
+### Download dataset:
+Download the swiftkey dataset from:
+
+https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip
+
+and place it in the Datasets folder.
+
 ### Training the network:
 
 Once your tensorflow environment is set up run "python trainer.py" from the src directory.
