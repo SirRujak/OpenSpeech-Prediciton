@@ -1,7 +1,7 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 from __future__ import print_function
-from gensim.models import word2vec
+##from gensim.models import word2vec
 import gzip
 import shutil
 import os

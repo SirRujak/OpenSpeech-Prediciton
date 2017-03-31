@@ -7,7 +7,9 @@ import os
 import numpy as np
 import tensorflow as tf
 import generator
+from openspeechsetup import *
 
+'''
 class DataHolder:
     """A simple holder class for keeping embeddings."""
     def __init__(self):
@@ -15,6 +17,7 @@ class DataHolder:
         self.reverse_dictionary = []
         self.embedding = []
         self.key = []
+'''
 
 class BatchGenerator(object):
     """Returns a numpy array representing a sentence of embeddings."""
@@ -286,11 +289,19 @@ class TrainGraph:
         ##self.logits = tf.concat([self.logits, self.hidden_layer], 0)
         ##tf.add(self.i, 1)
 
-
+def os_setup():
+    word2vec_pretrained_link = 'https://docs.google.com/uc?export=download&confirm=iu5Z&id=0B7XkCwpI5KDYNlNUTTlSS21pQmM'
+    swiftkey_prediction_data_link = 'https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip'
+    word2vec_filename = 'GoogleNews-vectors-negative300.bin.gz'
+    swiftkey_filename = 'Coursera-SwiftKey.zip'
+    dh = DataBuilder(word2vec_pretrained_link, swiftkey_prediction_data_link,
+                    word2vec_filename, swiftkey_filename)
+    dh.setup()
 
 if __name__ == "__main__":
     os.chdir('..')
     os.chdir('Datasets')
+    os_setup()
     TRAINED_EMBEDDING = generator.generate()
     TRAIN_DATA_FILENAMES = ['clean_en_US.blogs.txt',
                             'clean_en_US.news.txt',
