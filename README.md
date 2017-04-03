@@ -6,6 +6,7 @@ The backend training system for the OpenSpeech app.
 ### Anaconda:
 
   If you wish to keep this install separate from your base python installation follow these instructions:
+  
     1. Download and install Anaconda from here: https://www.continuum.io/downloads
     2. Create a new conda environment by running: conda create -n tensorflow
     3. Windows, open the conda shell and run: activate tensorflow
