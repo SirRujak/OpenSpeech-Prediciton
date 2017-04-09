@@ -79,7 +79,7 @@ class Trainer:
             Each inner list is a sentence."""
         print('Generating list for embedding.')
         for temp_file_name in self.train_data_filenames:
-            with open(temp_file_name, 'r') as temp_file:
+            with open(temp_file_name, 'r', encoding='utf8') as temp_file:
                 for line in temp_file:
                     temp_line = line.strip().split()
                     self.word_list.append(temp_line)
