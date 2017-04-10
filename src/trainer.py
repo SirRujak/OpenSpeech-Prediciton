@@ -1,6 +1,7 @@
-"""Used to train a neural network to predict words."""
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
+
+"""Used to train a neural network to predict words."""
 
 import pickle
 import os
