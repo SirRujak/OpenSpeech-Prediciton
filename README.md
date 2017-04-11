@@ -38,6 +38,17 @@ Ensure that CUDA 8.0 and cuDNN are installed from the following locations:
   
   3. Add the location of the cuDNN files to your system path. For windows this should be:
       %EXTRACTED_LOCATION%/cuda/lib/x64
+      
+  4. Copy the following file into %PATH%/bin/:
+      %EXTRACED_LOCATION%/cuda/bin/cudnn64_5.dll
+  
+  5. Copy the following file into %PATH%/include/:
+      %EXTRACTED_LOCATION%/cuda/include/cudnn.h
+      
+  6. Copy the following file into %PATH%/bin/:
+      %EXTRACTED_LOCATION%/cuda/lib/x64/cudnn.lib
+      
+  Where %PATH% is your Cuda install locaiton(such as "C:/Program Files/NVIDIA GPU Computing TOolkit/CUDA/v8.0/lib/x64/"
   
 ### Then run:
 
