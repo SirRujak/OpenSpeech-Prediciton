@@ -9,10 +9,10 @@ The backend training system for the OpenSpeech app.
   
     1. Download and install Anaconda from here: https://www.continuum.io/downloads
     2. Windows, open the conda shell and run:
-            create -n tensorflow -python=3.5
+            create -n tensorflow python=3.5
             activate tensorflow
     3. Linux, open a terminal and run:
-            conda create -n tensorflow -python=3.5
+            conda create -n tensorflow python=3.5
             source activate tensorflow
             
 After you have installed conda you can run the activate command for your system to return to your tensorflow installation. When using anaconda make sure you have activated the tensorflow environment either in the conda shell(Windows) or in a terminal(Linux) before running the rest of the setup.
