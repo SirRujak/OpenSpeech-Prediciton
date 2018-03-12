@@ -25,7 +25,7 @@ Run:
     pip install nltk -U
     pip install matplotlib -U
     pip install scikit-learn -U
-    conda install -c scipy=0.19.0
+    conda install -c scipy==0.19.0
 
 ### NVIDIA GPU:
 First, check if your GPU is supported here: https://developer.nvidia.com/cuda-gpus
@@ -58,7 +58,7 @@ Windows:
     pip install --upgrade nltk
     pip install --upgrade matplotlib
     pip install --upgrade scikit-learn
-    conda install -c scipy=0.19.0
+    conda install -c scipy==0.19.0
 
 Linux:
 
@@ -66,7 +66,7 @@ Linux:
     pip install --upgrade nltk
     pip install --upgrade matplotlib
     pip install --upgrade scikit-learn
-    pip install --upgrade scipy=0.19.0
+    pip install --upgrade scipy==0.19.0
 
 ### Download this project:
 Either download and unzip this project somewhere with a decent amount of space(I suggest at least 10GB) or run:
