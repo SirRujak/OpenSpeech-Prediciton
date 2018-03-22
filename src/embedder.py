@@ -22,16 +22,16 @@ class Embedder:
                  filenames=['clean_en_US.blogs.txt',
                             'clean_en_US.news.txt',
                             'clean_en_US.twitter.txt'],
-                 vocabulary_size=20000,
+                 vocabulary_size=10000,
                  data_index=0,
                  num_skips=1,
                  skip_window=6,
                  batch_size=1024,
-                 embedding_size=50,
+                 embedding_size=28,
                  valid_size=8,
                  valid_window=100,
                  num_sampled=4096,
-                 num_steps=500001
+                 num_steps=3001
                 ):
         self.filenames = filenames
         self.word_list = []
@@ -174,7 +174,7 @@ class Embedder:
 
             # Compute the similarity between minibatch examples and all embeddings.
             # We use the cosine distance:
-            self.norm = tf.sqrt(tf.reduce_sum(tf.square(self.embeddings), 1, keep_dims=True))
+            self.norm = tf.sqrt(tf.reduce_sum(tf.square(self.embeddings), 1, keepdims=True))
             self.normalized_embeddings = self.embeddings / self.norm
             self.valid_embeddings = tf.nn.embedding_lookup(
                 self.normalized_embeddings, self.valid_dataset)
@@ -192,14 +192,14 @@ class Embedder:
                     feed_dict = {self.train_dataset : batch_data, self.train_labels : batch_labels}
                     _, l = session.run([self.optimizer, self.loss], feed_dict=feed_dict)
                     average_loss += l
-                    if step % 2000 == 0:
+                    if step % 1000 == 0:
                         if step > 0:
-                            average_loss = average_loss / 2000
+                            average_loss = average_loss / 1000
                         # The average loss is an estimate of the loss over the last 2000 batches.
                         print('Average loss at step %d: %f' % (step, average_loss))
                         average_loss = 0
                     # note that this is expensive (~20% slowdown if computed every 500 steps)
-                    if step % 10000 == 0:
+                    if step % 2000 == 0:
                         sim = self.similarity.eval()
                         for i in range(self.valid_size):
                             valid_word = self.reverse_dictionary[self.valid_examples[i]]

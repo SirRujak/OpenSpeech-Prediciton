@@ -37,6 +37,7 @@ class DataBuilder:
         self.sk_file_name_extracted = sk_file_name[:-4]
         self.sk_size = 574661177
         self.stop_words = None
+        self.name_set = set()
         self.setup_text_replacement()
         self.model = None
         self.embedding_filename = embedding_filename
@@ -96,6 +97,7 @@ class DataBuilder:
             with open('clean_' + filename, 'a', encoding='utf8') as temp_out_file:
                 for line in temp_file:
                     temp_line = self.symbol_changer(line)
+                    print("test2")
                     ##self.regex_keep_apost.sub()
                     temp_line = self.regex_keep_apost.sub(' ', temp_line)
                     temp_line = temp_line.strip().split(' ')
@@ -105,20 +107,9 @@ class DataBuilder:
                         temp_word = word.strip()
                         if len(temp_word) > 0:
                             if temp_word.lower() in self.stop_words:
-                                temp_word = word.lower()
-                            if len(temp_word) > 1:
-                                if temp_word[0].isupper() and temp_word[1:].islower() and key != 0:
-                                    temp_word = word
-                                else:
-                                    temp_word = word.lower()
-                            else:
-                                temp_word = word.lower()
-                            ##if '10' in tmp_word:
-                            ##    print(tmp_word)
-                            try:
-                                temp_word = self.word_switch_dict[temp_word]
-                            except KeyError:
-                                pass
+                                temp_word = temp_word.lower()
+                            ## Rearange things so that we do contractions before
+                            ## we do name checks.
                             if temp_word in self.contractions \
                                 or temp_word.lower() in self.contractions:
                                 try:
@@ -129,6 +120,22 @@ class DataBuilder:
                             if temp_word[-2:] == "'s":
                                 temp_word = temp_word[:-2]
                             temp_word = self.punct_regex.sub('', temp_word)
+                            if len(temp_word) > 1:
+                                print('test')
+                                if temp_word[0].isupper() and temp_word[1:].islower() and word in self.name_set:
+                                    temp_word = temp_word
+                                else:
+                                    temp_word = temp_word.lower()
+                            else:
+                                temp_word = temp_word.lower()
+                            ##if '10' in tmp_word:
+                            ##    print(tmp_word)
+
+                            #try:
+                            #    temp_word = self.word_switch_dict[temp_word]
+                            #except KeyError:
+                            #    pass
+
                             if temp_word != "":
                                 temp_line_2.extend(temp_word.split())
                     temp_line_3 = []
@@ -329,6 +336,14 @@ class DataBuilder:
             "you're": "you are",
             "you've": "you have"
             }
+        name_files = ['first_names_2016_us_census_baby.txt', 'last_names_2000_us_census.csv']
+        for f in name_files:
+            with open(f) as temp_file:
+                for line in temp_file:
+                    temp_val = line.split(",")[0]
+                    if temp_val != "name" and temp_val != "Unnamed":
+                        self.name_set.add(temp_val.title())
+        print("Bug" in self.name_set)
 
 def generate():
     """Main callable, fetches necissary data then builds embedding. Returns

@@ -45,6 +45,7 @@ class DataBuilder:
         self.sk_size = 574661177
         self.sorted_words_file = sorted_words_file
         self.stop_words = None
+        self.name_set = set()
         ## FIXME: Really need to move this to the commented line.
         ## It breaks way too often with just a bad apostrophe.
         self.setup_text_replacement()
@@ -241,7 +242,7 @@ class DataBuilder:
                 print('Found %s, skipping.' % i)
 
     def clean_data(self, filename):
-        ##print(os.listdir())
+        """Steps through each file and attempts to reduce words to a uniform set."""
         with open(filename, 'r', encoding='utf8') as temp_file:
             with open('clean_' + filename, 'a', encoding='utf8') as temp_out_file:
                 for line in temp_file:
@@ -255,29 +256,34 @@ class DataBuilder:
                         temp_word = word.strip()
                         if len(temp_word) > 0:
                             if temp_word.lower() in self.stop_words:
-                                temp_word = word.lower()
-                            if len(temp_word) > 1:
-                                if temp_word[0].isupper() and temp_word[1:].islower() and key != 0:
-                                    temp_word = word
-                                else:
-                                    temp_word = word.lower()
-                            else:
-                                temp_word = word.lower()
-                            ##if '10' in tmp_word:
-                            ##    print(tmp_word)
-                            try:
-                                temp_word = self.word_switch_dict[temp_word]
-                            except:
-                                pass
-                            if temp_word in self.contractions or temp_word.lower() in self.contractions:
+                                temp_word = temp_word.lower()
+                            ## Rearange things so that we do contractions before
+                            ## we do name checks.
+                            if temp_word in self.contractions \
+                                or temp_word.lower() in self.contractions:
                                 try:
                                     ##temp_line[key] = self.contractions[word]
                                     temp_word = self.contractions[temp_word]
-                                except:
+                                except KeyError:
                                     temp_word = self.contractions[temp_word.lower()]
                             if temp_word[-2:] == "'s":
                                 temp_word = temp_word[:-2]
                             temp_word = self.punct_regex.sub('', temp_word)
+                            if len(temp_word) > 1:
+                                if temp_word[0].isupper() and temp_word[1:].islower() and word in self.name_set:
+                                    temp_word = temp_word
+                                else:
+                                    temp_word = temp_word.lower()
+                            else:
+                                temp_word = temp_word.lower()
+                            ##if '10' in tmp_word:
+                            ##    print(tmp_word)
+
+                            #try:
+                            #    temp_word = self.word_switch_dict[temp_word]
+                            #except KeyError:
+                            #    pass
+
                             if temp_word != "":
                                 temp_line_2.extend(temp_word.split())
                     temp_line_3 = []
@@ -473,6 +479,13 @@ class DataBuilder:
             "you're": "you are",
             "you've": "you have"
             }
+        name_files = ['first_names_2016_us_census_baby.txt', 'last_names_2000_us_census.csv']
+        for f in name_files:
+            with open(f) as temp_file:
+                for line in temp_file:
+                    temp_val = line.split(",")[0]
+                    if temp_val != "name" and temp_val != "Unnamed":
+                        self.name_set.add(temp_val.title())
 
 if __name__ == '__main__':
     word2vec_pretrained_link = 'https://docs.google.com/uc?export=download&confirm=iu5Z&id=0B7XkCwpI5KDYNlNUTTlSS21pQmM'

@@ -1,0 +1,2 @@
+model_checkpoint_path: "input-5-output-10k-model.chkp"
+all_model_checkpoint_paths: "input-5-output-10k-model.chkp"
