@@ -252,10 +252,25 @@ class Trainer:
             with open("index_to_word_dict.json", "w") as f:
                 json.dump(self.data_holder.reverse_dictionary, f)
             with open("embeddings_list.json", "w") as f:
-                temp_list = []
-                for item in np.nditer(self.data_holder.embedding):
-                    temp_list.append(float(item))
-                json.dump(temp_list, f)
+                temp_word_list = []
+                print(self.data_holder.embedding)
+                rows = self.data_holder.embedding.shape[0]
+                cols = self.data_holder.embedding.shape[1]
+                for x in range(0, rows):
+                    temp_dimension_list = []
+                    for y in range(0, cols):
+                        temp_dimension_list.append(float(self.data_holder.embedding[x,y]))
+                        ##print a[x,y]
+                    print(temp_dimension_list)
+                    temp_word_list.append(temp_dimension_list)
+                # for word in np.nditer(self.data_holder.embedding):
+                #     temp_dimension_list = []
+                #     print(word)
+                #     for dimension_val in np.nditer(word):
+                #         temp_dimension_list.append(float(dimension_val))
+                #     ##print(temp_dimension_list)
+                #     temp_word_list.append(temp_dimension_list)
+                json.dump(temp_word_list, f)
 
 
             os.chdir('..')
