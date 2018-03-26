@@ -9,6 +9,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.python.tools import freeze_graph, optimize_for_inference_lib
 import generator
+import json
 from keras import losses
 from keras.layers import Input, Dense, Flatten, Conv1D, Dropout
 from keras.models import Model
@@ -245,6 +246,11 @@ class Trainer:
 
             with tf.gfile.FastGFile("./tensorflow_lite" + model_name + ".pb", "wb") as f:
                 f.write(output_graph_def.SerializeToString())
+
+            with open("word_to_index_dict.json", 'w') as f:
+                json.dump(self.data_holder.dictionary, f)
+            with open("index_to_word_dict.json", "w") as f:
+                json.dump(self.data_holder.reverse_dictionary, f)
 
 
             os.chdir('..')
