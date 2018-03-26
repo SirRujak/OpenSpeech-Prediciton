@@ -251,6 +251,11 @@ class Trainer:
                 json.dump(self.data_holder.dictionary, f)
             with open("index_to_word_dict.json", "w") as f:
                 json.dump(self.data_holder.reverse_dictionary, f)
+            with open("embeddings_list.json", "w") as f:
+                temp_list = []
+                for item in np.nditer(self.data_holder.embedding):
+                    temp_list.append(float(item))
+                json.dump(temp_list, f)
 
 
             os.chdir('..')
