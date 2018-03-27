@@ -193,7 +193,7 @@ class Trainer:
             output = keras.layers.concatenate([tower_1, tower_2], axis=1)
             x = Flatten()(output)
             x = Dense(128, activation='relu')(x)
-            x = Dropout(0.3)(x)
+            #x = Dropout(0.3)(x)
             x = Dense(64, activation='relu')(x)
             '''
             x = Flatten()(inputs)
@@ -253,7 +253,7 @@ class Trainer:
                 json.dump(self.data_holder.reverse_dictionary, f)
             with open("embeddings_list.json", "w") as f:
                 temp_word_list = []
-                print(self.data_holder.embedding)
+                ##print(self.data_holder.embedding)
                 rows = self.data_holder.embedding.shape[0]
                 cols = self.data_holder.embedding.shape[1]
                 for x in range(0, rows):
@@ -261,7 +261,7 @@ class Trainer:
                     for y in range(0, cols):
                         temp_dimension_list.append(float(self.data_holder.embedding[x,y]))
                         ##print a[x,y]
-                    print(temp_dimension_list)
+                    ##print(temp_dimension_list)
                     temp_word_list.append(temp_dimension_list)
                 # for word in np.nditer(self.data_holder.embedding):
                 #     temp_dimension_list = []
